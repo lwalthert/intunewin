@@ -286,7 +286,7 @@ func (iw *Intunewin) Close() error {
 }
 
 // ExtractContent() writes the IntunePackage.intunewin to the path supplied in path
-func (iw *Intunewin) ExtractContent(path string) error {
+func (iw *Intunewin) ExtractContent() error {
 	output, err := os.OpenFile(iw.metadata.FileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return err
