@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/lwalthert/intunewin/pkg"
 )
 
 const version = "1.0.0"
@@ -56,7 +58,7 @@ func main() {
 		log.Printf("Setup File: %q", cfg.setupFile)
 		log.Printf("Output Folder: %q", outputFolder)
 
-		_, err = NewIntunewin(setupFolder, cfg.setupFile, outputFolder)
+		_, err = pkg.NewIntunewin(setupFolder, cfg.setupFile, outputFolder)
 		if err != nil {
 			log.Println(err)
 			return
@@ -64,7 +66,15 @@ func main() {
 	case "-e":
 		path := string(os.Args[2])
 		absPath, _ := filepath.Abs(path)
-		Extract(absPath)
+		iw, err := pkg.OpenFile(absPath)
+		if err != nil {
+			log.Fatalf(err.Error())
+			return
+		}
+
+		defer iw.Close()
+
+		iw.ExtractContent()
 
 		return
 	default:
