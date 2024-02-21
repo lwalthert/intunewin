@@ -1,9 +1,6 @@
 package main
 
 import (
-	"archive/zip"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -55,61 +52,6 @@ func writeFileToZIP(file *os.File, w io.Writer) (int, error) {
 	}
 	// log.Printf("%d", bytesWritten)
 	return bytesWritten, nil
-}
-
-func buildZipReader(fileName string) (*zip.ReadCloser, func(), error) {
-	// Open the intunewin archive for reading.
-	r, err := zip.OpenReader(fileName)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	closer := func() {
-		r.Close()
-	}
-
-	return r, closer, nil
-}
-
-type AESCBCWriter struct {
-	buf   []byte
-	block cipher.BlockMode
-	out   io.Writer
-}
-
-func NewAESCBCWriter(writer io.Writer, key, iv []byte) (*AESCBCWriter, error) {
-	b, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	blockMode := cipher.NewCBCEncrypter(b, iv)
-
-	return &AESCBCWriter{
-		block: blockMode,
-		out:   writer,
-	}, nil
-}
-
-func (b *AESCBCWriter) Write(p []byte) (n int, err error) {
-	toWrite := len(p)
-	mul := toWrite / b.block.BlockSize()
-	size := mul * b.block.BlockSize()
-	if cap(b.buf) != size {
-		b.buf = make([]byte, toWrite)
-	}
-
-	b.block.CryptBlocks(b.buf, p[:toWrite])
-
-	write, err := b.out.Write(b.buf)
-	if err != nil {
-		return 0, err
-	}
-
-	if write < b.block.BlockSize() {
-		return 0, io.ErrUnexpectedEOF
-	}
-
-	return write, nil
 }
 
 func sha256FileHash(input *os.File) (string, error) {
