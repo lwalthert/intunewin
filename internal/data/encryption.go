@@ -15,3 +15,13 @@ type EncryptionInfo struct {
 	FileDigest           string  `xml:"FileDigest"`          // hash of the unencrypted file
 	FileDigestAlgorithm  string  `xml:"FileDigestAlgorithm"` // hash algorithm used for the FileDigest SHA256 is the default
 }
+
+func NewEncryptionInfo(key, macKey, iv, fileDigestAlgorithm string, profileIdentifier Profile) *EncryptionInfo {
+	return &EncryptionInfo{
+		Key:                  key,
+		MacKey:               macKey,
+		InitializationVector: iv,
+		FileDigestAlgorithm:  fileDigestAlgorithm,
+		ProfileIdentifier:    profileIdentifier,
+	}
+}

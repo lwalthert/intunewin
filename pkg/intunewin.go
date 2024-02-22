@@ -26,13 +26,15 @@ const (
 	contentsDir    = "IntuneWinPackage/Contents/"
 	outputFileName = "IntunePackage.intunewin" // The name of the encryptet content file
 	toolVersion    = "1.4.0.0"
+	fileDigestAlgo = "SHA256"
 )
 
 type Intunewin struct {
 	Name             string               // The name of the intunewin file
-	Path             string               // The path to the Intunewin file
+	Path             string               // The path to the intunewin file
 	reader           *zip.ReadCloser      //
 	metadata         data.ApplicationInfo // the metadata of the intunewin file
+	contentDir	   	string               // The path to the content folder
 	contentFile      string               // The path to the content file
 	validContentFile bool
 	aesKey           []byte
@@ -42,38 +44,39 @@ type Intunewin struct {
 	contentHash      []byte
 }
 
-func NewIntunewin(contentPath, setupFile, outputPath string) (*Intunewin, error) {
-	iw := new(Intunewin)
-	iw.metadata = *data.NewApplicationInfo(toolVersion)
-	// Check setup path
-	if !validator.PathIsValid(contentPath, validator.Directory) {
-		// TODO Logging and Error handling
-		return nil, nil
+// NewIntunewin creates a new intunewin file
+// contentPath: The path to the content folder
+// setupFile: The name of the setup file, relative to the content folder
+// outputPath: The path to the output folder
+// Returns a pointer to the new intunewin file
+func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, error) {
+	// Validate the input
+	ok := validator.NotBlank(input string)
+	if !ok {
+		return nil, errors.New("input string cannot be blank")
 	}
-	log.Printf("Content Directory: %q", contentPath)
+
+	ok = validator.FileIsInDirectory(setupFile, contentPath)
+	if !ok {
+		return nil, fmt.Errorf("setup file %s is not in content folder %s", setupFile, contentPath)
+	}
 
 	setupPath := path.Join(contentPath, setupFile)
-	if !validator.PathIsValid(setupPath, validator.File) {
-		// TODO Logging and Error handling
-		return nil, nil
+
+	iw := &Intunewin{
+		metadata: *data.NewApplicationInfo(name, setupFile, toolVersion),
 	}
 
 	iw.metadata.SetupFile = path.Base(setupPath)
-
-	log.Printf("Setup File Path: %q", setupPath)
-	log.Printf("Setup File Name: %q", iw.metadata.SetupFile)
-
-	setupName := strings.TrimSuffix(iw.metadata.SetupFile, path.Ext(iw.metadata.SetupFile))
-	if setupName == "" {
-		// TODO Logging and Error handling
-		return nil, nil
-	}
-
-	// TODO handle msi setup files
 	iw.Name = setupName // set
 
-	// Create the name of the output file
-	iw.metadata.FileName = setupName + ".intunewin"
+	// TODO handle msi setup files
+	// The setup information that is stored in the msi file can be
+	// extracted using window installer. This is probably only possible
+	// on windows.
+	// It is written to the metadata file in the intunewin file.
+
+	// Create the intunewin file
 	iw.Path = path.Join(outputPath, iw.metadata.FileName)
 	output, err := os.Create(iw.Path)
 	if err != nil {
@@ -82,30 +85,31 @@ func NewIntunewin(contentPath, setupFile, outputPath string) (*Intunewin, error)
 
 	defer output.Close()
 
-	// Generate random key and IV
+	// Generate the encryption keys and store them in the metadata
 	iv, err := generateKey(16)
 	if err != nil {
-		// TODO Logging and Error handling
 		return nil, err
 	}
 	iw.aesIV = iv
-	iw.metadata.EncryptionInfo.InitializationVector = base64.RawStdEncoding.EncodeToString(iw.aesIV)
+
 	aesKey, err := generateKey(32)
 	if err != nil {
-		// TODO Logging and Error handling
 		return nil, err
 	}
 	iw.aesKey = aesKey
-	iw.metadata.EncryptionInfo.Key = base64.RawStdEncoding.EncodeToString(iw.aesKey)
+
 	macKey, err := generateKey(32)
 	if err != nil {
-		// TODO Logging and Error handling
 		return nil, err
 	}
 	iw.macKey = macKey
-	iw.metadata.EncryptionInfo.MacKey = base64.RawStdEncoding.EncodeToString(iw.macKey)
 
-	iw.metadata.EncryptionInfo.ProfileIdentifier = data.ProfileVersion1
+	iw.metadata.EncryptionInfo = *data.NewEncryptionInfo(
+		base64.RawStdEncoding.EncodeToString(iw.aesKey),
+		base64.RawStdEncoding.EncodeToString(iw.aesIV),
+		base64.RawStdEncoding.EncodeToString(iw.macKey),
+		fileDigestAlgo,
+		data.ProfileVersion1)
 
 	// Package the content file
 	contentArchive, err := os.CreateTemp("", "IntunePackage*.zip")

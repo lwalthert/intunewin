@@ -15,6 +15,17 @@ type ApplicationInfo struct {
 	MSIInfo                MSI            `xml:"MsiInfo"`
 }
 
+func NewApplicationInfo(name, setupFile, toolVersion string) *ApplicationInfo {
+	return &ApplicationInfo{
+		Name:         name,
+		FileName:     name + ".intunewin",
+		SetupFile:    setupFile,
+		ToolVersion:  toolVersion,
+		XMLSchemaDef: "http://www.w3.org/2001/XMLSchema",
+		XMLSchemaIns: "http://www.w3.org/2001/XMLSchema-instance",
+	}
+}
+
 type MSI struct {
 	ProductCode                string `xml:"MsiProductCode"`    // guid
 	ProductVersion             string `xml:"MsiProductVersion"` // version string
@@ -30,12 +41,4 @@ type MSI struct {
 	ContainsSystemRegistryKeys bool   `xml:"MsiContainsSystemRegistryKeys"`
 	ContainsSystemFolders      bool   `xml:"MsiContainsSystemFolders"`
 	Publisher                  string `xml:"MsiPublisher"`
-}
-
-func NewApplicationInfo(toolVersion string) *ApplicationInfo {
-	return &ApplicationInfo{
-		ToolVersion:  toolVersion,
-		XMLSchemaDef: "http://www.w3.org/2001/XMLSchema",
-		XMLSchemaIns: "http://www.w3.org/2001/XMLSchema-instance",
-	}
 }

@@ -3,6 +3,7 @@ package validator
 import (
 	"errors"
 	"os"
+	"path"
 )
 
 type PathType int
@@ -12,7 +13,7 @@ const (
 	File
 )
 
-func PathIsValid(path string, expected PathType) bool {
+func PathIsExists(path string, expected PathType) bool {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return false
@@ -26,4 +27,13 @@ func PathIsValid(path string, expected PathType) bool {
 	default:
 		panic(errors.New("got invalid PathType as Input"))
 	}
+}
+
+func FileIsInDirectory(file, directory string) bool {
+	path := path.Join(directory, file)
+	return PathIsExists(path, File)
+}
+
+func NotBlank(input string) bool {
+	return input != ""
 }
