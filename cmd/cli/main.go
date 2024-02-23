@@ -26,7 +26,7 @@ func main() {
 	extractFile := extract.String("e", "", "Path to the .intunewin file to extract.")
 
 	if len(os.Args) < 2 {
-		generate.Usage()
+		printHelp()
 		os.Exit(1)
 	}
 
@@ -34,6 +34,7 @@ func main() {
 	case "-v":
 		fmt.Fprintf(os.Stdout, "intunewin version: %s\n", version)
 	case "-h":
+		printHelp()
 		generate.Usage()
 		extract.Usage()
 	case "-c":
@@ -76,8 +77,7 @@ func main() {
 			log.Fatalf(err.Error())
 		}
 	default:
-		generate.Usage()
-		extract.Usage()
+		printHelp()
 		os.Exit(1)
 	}
 }
