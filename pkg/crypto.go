@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -113,25 +112,6 @@ func ValidateMAC(r io.Reader, h func() hash.Hash, key, suppliedMAC []byte) (bool
 	expectedMAC := mac.Sum(nil)
 
 	return hmac.Equal(expectedMAC, suppliedMAC), nil
-}
-
-func decodeBase64Key(input string) ([]byte, error) {
-	key, err := base64.StdEncoding.DecodeString(input)
-	if err != nil {
-		return nil, err
-	}
-
-	return key, nil
-}
-
-func generateKey(length int) ([]byte, error) {
-	key := make([]byte, length)
-	_, err := rand.Read(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return key, nil
 }
 
 func sha256FileHash(input *os.File) (string, error) {
