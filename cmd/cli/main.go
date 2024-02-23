@@ -5,81 +5,79 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/lwalthert/intunewin/pkg"
 )
 
 const version = "1.0.0"
 
-type config struct {
-	setupFolder  string
-	setupFile    string
-	outputFolder string
-	// catalogFolder string
-	quietMode bool
-}
-
-type application struct {
-}
-
 func main() {
-	var cfg config
-	packaging := flag.NewFlagSet("packaging", flag.ExitOnError)
-	packaging.StringVar(&cfg.setupFolder, "c", "", "Setup folder for all setup files. All files in this folder will be compressed into .intunewin file.")
-	packaging.StringVar(&cfg.setupFile, "s", "", "Setup file (e.g. setup.exe or setup.msi).")
-	packaging.StringVar(&cfg.outputFolder, "o", "", "Output folder for the generated .intunewin file.")
-	// packaging.StringVar(&cfg.catalogFolder, "a", "", "Catalog folder for all catalog files. All files in this folder will be treated as catalog file for Win10 S mode.")
-	// packaging.BoolVar(&cfg.quietMode, "q", false, "If -q is specified, it will be in quiet mode. If the output file already exists, it will be overwritten.")
+	generate := flag.NewFlagSet("generate", flag.ExitOnError)
+	contentDir := generate.String("c", "", "Setup folder for all setup files. All files in this folder will be compressed into .intunewin file.")
+	setupFile := generate.String("s", "", "Setup file (e.g. setup.exe or setup.msi).")
+	outputDir := generate.String("o", "", "Output folder for the generated .intunewin file.")
+	// catalogDir := generate.String("a", "", "Catalog folder for all catalog files. All files in this folder will be treated as catalog file for Win10 S mode.")
+	// quietRun := generate.Bool("q", false, "If -q is specified, it will be in quiet mode. If the output file already exists, it will be overwritten.")
+
+	extract := flag.NewFlagSet("extract", flag.ExitOnError)
+	extractFile := extract.String("e", "", "Path to the .intunewin file to extract.")
 
 	if len(os.Args) < 2 {
-		packaging.Usage()
-		return
+		generate.Usage()
+		os.Exit(1)
 	}
 
 	switch os.Args[1] {
 	case "-v":
 		fmt.Fprintf(os.Stdout, "intunewin version: %s\n", version)
-		return
 	case "-h":
-		packaging.Usage()
-		return
+		generate.Usage()
+		extract.Usage()
 	case "-c":
-		err := packaging.Parse(os.Args[1:])
+		err := generate.Parse(os.Args[1:])
 		if err != nil {
-			packaging.Usage()
-			return
+			generate.Usage()
+			os.Exit(1)
 		}
 
-		setupFolder, _ := filepath.Abs(cfg.setupFolder)
-		outputFolder, _ := filepath.Abs(cfg.outputFolder)
-
-		log.Printf("Setup Folder: %q", setupFolder)
-		log.Printf("Setup File: %q", cfg.setupFile)
-		log.Printf("Output Folder: %q", outputFolder)
-
-		_, err = pkg.NewIntunewin(setupFolder, cfg.setupFile, outputFolder)
+		contentDir, err := filepath.Abs(*contentDir)
 		if err != nil {
-			log.Println(err)
-			return
+			log.Fatal(err)
+		}
+		outputDir, err := filepath.Abs(*outputDir)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		name := strings.TrimSuffix(path.Base(*setupFile), path.Ext(*setupFile))
+
+		_, err = pkg.NewIntunewin(name, contentDir, *setupFile, outputDir)
+		if err != nil {
+			log.Fatal(err)
 		}
 	case "-e":
-		path := string(os.Args[2])
-		absPath, _ := filepath.Abs(path)
-		iw, err := pkg.OpenFile(absPath)
+		err := extract.Parse(os.Args[1:])
+		if err != nil {
+			extract.Usage()
+			os.Exit(1)
+		}
+		iw, err := pkg.OpenFile(*extractFile)
 		if err != nil {
 			log.Fatalf(err.Error())
-			return
 		}
 
 		defer iw.Close()
 
-		iw.ExtractContent()
-
-		return
+		err = iw.ExtractContent()
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
 	default:
-		packaging.Usage()
-		return
+		generate.Usage()
+		extract.Usage()
+		os.Exit(1)
 	}
-
 }
