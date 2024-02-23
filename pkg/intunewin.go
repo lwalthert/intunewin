@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,7 +33,7 @@ type Intunewin struct {
 	Path             string               // The path to the intunewin file
 	reader           *zip.ReadCloser      //
 	metadata         data.ApplicationInfo // the metadata of the intunewin file
-	contentDir	   	string               // The path to the content folder
+	contentDir       string               // The path to the content folder
 	contentFile      string               // The path to the content file
 	validContentFile bool
 	aesKey           []byte
@@ -51,7 +50,7 @@ type Intunewin struct {
 // Returns a pointer to the new intunewin file
 func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, error) {
 	// Validate the input
-	ok := validator.NotBlank(input string)
+	ok := validator.NotBlank(name)
 	if !ok {
 		return nil, errors.New("input string cannot be blank")
 	}
@@ -68,7 +67,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	}
 
 	iw.metadata.SetupFile = path.Base(setupPath)
-	iw.Name = setupName // set
+	iw.Name = name // set
 
 	// TODO handle msi setup files
 	// The setup information that is stored in the msi file can be
