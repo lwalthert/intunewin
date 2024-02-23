@@ -265,7 +265,7 @@ func OpenFile(file string) (*Intunewin, error) {
 		return nil, errors.New("hmac missmatch: value in content.xml doesn't match the value in the file")
 	}
 
-	iw.validContentFile, err = ValidateMAC(content, sha256.New, iw.macKey, iw.mac)
+	iw.validContentFile, err = ValidateHMAC(content, sha256.New, iw.macKey, iw.mac)
 	if err != nil {
 		return nil, err
 	}
@@ -322,29 +322,45 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 		return err
 	}
 
-	_, err = copyInChunks(input, dec)
+	n, err := copyInChunks(input, dec)
 	if err != nil {
 		return err
 	}
 
-	// TODO Improve this
-	// https://datatracker.ietf.org/doc/html/rfc5246#section-6.2.3.2 remove PKCSC#7 padding
-	paddingLength := dec.Block.BlockSize() - iw.metadata.UnencryptedContentSize%dec.Block.BlockSize()
+	if n%int64(dec.Block.BlockSize()) != 0 {
+		return errors.New("data is not block-aligned")
+	}
 
-	if paddingLength != 0 {
-		expectedPadding := bytes.Repeat([]byte{byte(paddingLength)}, paddingLength)
-		padding := make([]byte, paddingLength)
-		_, err = output.ReadAt(padding, int64(iw.metadata.UnencryptedContentSize-1))
+	// TODO maybe only run this when output file size isn't block aligned
+	// Strip the PKCS#7 padding
+	// https://datatracker.ietf.org/doc/html/rfc5246#section-6.2.3.2 remove PKCSC#7 padding
+	buf := make([]byte, 1)
+	_, err = output.ReadAt(buf, n-1)
+	if err != nil {
+		return err
+	}
+	padLen := int64(buf[0])
+
+	if padLen > 0 && padLen < int64(dec.Block.BlockSize()) {
+		refPad := bytes.Repeat([]byte{byte(padLen)}, int(padLen))
+		padding := make([]byte, padLen)
+		_, err = output.ReadAt(padding, n-1-padLen)
 		if err != nil {
 			return err
 		}
 
-		if bytes.Equal(expectedPadding, padding) {
-			output.Truncate(int64(iw.metadata.UnencryptedContentSize))
+		if bytes.Equal(refPad, padding) {
+			output.Truncate(n - padLen)
 		}
+	}
 
-		// TODO better error handling
-		return errors.New("padding doesn't match expected value")
+	// Verify SHA256 hash
+	hash, err := sha256FileHash(output)
+	if err != nil {
+		return err
+	}
+	if hash == iw.metadata.EncryptionInfo.FileDigest {
+		return errors.New("unexpected content file hash")
 	}
 
 	return nil

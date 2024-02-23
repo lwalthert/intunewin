@@ -101,7 +101,7 @@ func (bw AESCBCDecrypter) Write(b []byte) (int, error) {
 
 // ValidateMAC validates check if the HMAC generated with the data read through r matches the hash passed to the function.
 // If they match it returns (true, nil) otherwise it returns (false, nil)
-func ValidateMAC(r io.Reader, h func() hash.Hash, key, suppliedMAC []byte) (bool, error) {
+func ValidateHMAC(r io.Reader, h func() hash.Hash, key, suppliedMAC []byte) (bool, error) {
 	mac := hmac.New(h, key)
 
 	_, err := copyInChunks(r, mac)
