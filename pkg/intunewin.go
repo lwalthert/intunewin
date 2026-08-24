@@ -306,7 +306,10 @@ func (iw *Intunewin) ExtractContent() error {
 	}
 	defer content.Close()
 
-	iw.decryptContentArchive(content, output)
+	err = iw.decryptContentArchive(content, output)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -320,7 +323,7 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 
 	// Create a reader for the input and discard the first 48 bytes (MAC + IV)
 	header := make([]byte, 48)
-	_, err = input.Read(header)
+	_, err = input.ReadFull(header)
 	if err != nil {
 		return err
 	}
@@ -362,7 +365,7 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 	if err != nil {
 		return err
 	}
-	if hash == iw.applicationInfo.EncryptionInfo.FileDigest {
+	if hash != iw.applicationInfo.EncryptionInfo.FileDigest {
 		return errors.New("unexpected content file hash")
 	}
 
