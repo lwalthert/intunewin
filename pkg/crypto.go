@@ -35,7 +35,7 @@ func NewAESCBCEncrypter(w io.Writer, h func() hash.Hash, iv, aesKey, macKey []by
 	if err != nil {
 		return nil, err
 	}
-	hash.Write(iv)
+	_, err = hash.Write(iv)
 	if err != nil {
 		return nil, err
 	}

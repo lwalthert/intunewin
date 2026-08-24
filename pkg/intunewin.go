@@ -32,7 +32,7 @@ type Intunewin struct {
 	Name             string               // The name of the intunewin file
 	Path             string               // The path to the intunewin file
 	reader           *zip.ReadCloser      //
-	metadata         data.ApplicationInfo // the metadata of the intunewin file
+	applicationInfo  data.ApplicationInfo // the metadata of the intunewin file
 	contentDir       string               // The path to the content folder
 	contentFile      string               // The path to the content file
 	validContentFile bool
@@ -44,6 +44,7 @@ type Intunewin struct {
 }
 
 // NewIntunewin creates a new intunewin file
+// name: The name of the intunewin file
 // contentPath: The path to the content folder
 // setupFile: The name of the setup file, relative to the content folder
 // outputPath: The path to the output folder
@@ -63,20 +64,20 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	setupPath := path.Join(contentPath, setupFile)
 
 	iw := &Intunewin{
-		metadata: *data.NewApplicationInfo(name, setupFile, toolVersion),
+		applicationInfo: *data.NewApplicationInfo(name, setupFile, toolVersion),
 	}
 
-	iw.metadata.SetupFile = path.Base(setupPath)
-	iw.Name = name // set
+	iw.applicationInfo.SetupFile = path.Base(setupPath)
+	iw.Name = name
 
-	// TODO handle msi setup files
+	// TODO: handle msi setup files
 	// The setup information that is stored in the msi file can be
 	// extracted using window installer. This is probably only possible
 	// on windows.
 	// It is written to the metadata file in the intunewin file.
 
 	// Create the intunewin file
-	iw.Path = path.Join(outputPath, iw.metadata.FileName)
+	iw.Path = path.Join(outputPath, iw.applicationInfo.FileName)
 	output, err := os.Create(iw.Path)
 	if err != nil {
 		return nil, err
@@ -84,7 +85,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 
 	defer output.Close()
 
-	// Generate the encryption keys and store them in the metadata
+	// Generate the encryption keys and add them to the metadata
 	iv, err := generateKey(16)
 	if err != nil {
 		return nil, err
@@ -103,14 +104,14 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	}
 	iw.macKey = macKey
 
-	iw.metadata.EncryptionInfo = *data.NewEncryptionInfo(
+	iw.applicationInfo.EncryptionInfo = *data.NewEncryptionInfo(
 		base64.RawStdEncoding.EncodeToString(iw.aesKey),
 		base64.RawStdEncoding.EncodeToString(iw.aesIV),
 		base64.RawStdEncoding.EncodeToString(iw.macKey),
 		fileDigestAlgo,
 		data.ProfileVersion1)
 
-	// Package the content file
+	// Create the IntunewinPackage.zip containing the content of the content folder
 	contentArchive, err := os.CreateTemp("", "IntunePackage*.zip")
 	if err != nil {
 		// TODO Logging and Error handling
@@ -130,14 +131,16 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		// TODO Logging and Error handling
 		return nil, err
 	}
-	iw.metadata.UnencryptedContentSize = int(caStat.Size())
+
+	iw.applicationInfo.UnencryptedContentSize = int(caStat.Size())
 	archiveHash, err := sha256FileHash(contentArchive)
 	if err != nil {
 		// TODO Logging and Error handling
 		return nil, err
 	}
-	iw.metadata.EncryptionInfo.FileDigest = archiveHash
-	iw.metadata.EncryptionInfo.FileDigestAlgorithm = "SHA256"
+
+	iw.applicationInfo.EncryptionInfo.FileDigest = archiveHash
+	iw.applicationInfo.EncryptionInfo.FileDigestAlgorithm = "SHA256"
 
 	_, err = contentArchive.Seek(0, 0)
 	if err != nil {
@@ -151,7 +154,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 
 	defer os.Remove(encryptedContent.Name())
 
-	iw.metadata.EncryptionInfo.Mac = base64.StdEncoding.EncodeToString(mac)
+	iw.applicationInfo.EncryptionInfo.Mac = base64.StdEncoding.EncodeToString(mac)
 
 	_, err = encryptedContent.Seek(0, 0)
 	if err != nil {
@@ -209,38 +212,38 @@ func OpenFile(file string) (*Intunewin, error) {
 
 	// Decode the xml
 	dec := xml.NewDecoder(f)
-	err = dec.Decode(&iw.metadata)
+	err = dec.Decode(&iw.applicationInfo)
 	if err != nil {
 		return nil, err
 	}
 
 	// Decode the AES key, IV, MAC, MAC key and FileHash
-	iw.macKey, err = decodeBase64Key(iw.metadata.EncryptionInfo.MacKey)
+	iw.macKey, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.MacKey)
 	if err != nil {
 		return nil, err
 	}
-	iw.mac, err = decodeBase64Key(iw.metadata.EncryptionInfo.Mac)
-	if err != nil {
-		return nil, err
-	}
-
-	iw.aesKey, err = decodeBase64Key(iw.metadata.EncryptionInfo.Key)
+	iw.mac, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.Mac)
 	if err != nil {
 		return nil, err
 	}
 
-	iw.aesIV, err = decodeBase64Key(iw.metadata.EncryptionInfo.InitializationVector)
+	iw.aesKey, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.Key)
 	if err != nil {
 		return nil, err
 	}
 
-	iw.contentHash, err = decodeBase64Key(iw.metadata.EncryptionInfo.FileDigest)
+	iw.aesIV, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.InitializationVector)
+	if err != nil {
+		return nil, err
+	}
+
+	iw.contentHash, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.FileDigest)
 	if err != nil {
 		return nil, err
 	}
 
 	// Set the variable contentfile
-	iw.contentFile = path.Join("IntuneWinPackage/Contents/", iw.metadata.FileName)
+	iw.contentFile = path.Join("IntuneWinPackage/Contents/", iw.applicationInfo.FileName)
 
 	// Validate the HMAC value
 	// 1. Open the content file
@@ -290,7 +293,7 @@ func (iw *Intunewin) Close() error {
 
 // ExtractContent() writes the IntunePackage.intunewin to the path supplied in path
 func (iw *Intunewin) ExtractContent() error {
-	output, err := os.OpenFile(iw.metadata.FileName, os.O_RDWR|os.O_CREATE, 0644)
+	output, err := os.OpenFile(iw.applicationInfo.FileName, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
@@ -359,7 +362,7 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 	if err != nil {
 		return err
 	}
-	if hash == iw.metadata.EncryptionInfo.FileDigest {
+	if hash == iw.applicationInfo.EncryptionInfo.FileDigest {
 		return errors.New("unexpected content file hash")
 	}
 
@@ -481,7 +484,7 @@ func createContentArchive(setupDirectory string, w io.Writer) error {
 
 // writeMetadata()
 func (iw *Intunewin) writeMetadata(w io.Writer) (int, error) {
-	out, err := xml.MarshalIndent(&iw.metadata, " ", " ")
+	out, err := xml.MarshalIndent(&iw.applicationInfo, " ", " ")
 	if err != nil {
 		return 0, err
 	}
