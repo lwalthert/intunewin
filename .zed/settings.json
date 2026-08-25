@@ -1,0 +1,9 @@
+{
+  "lsp": {
+    "gopls": {
+      "settings": {
+        "buildFlags": ["-tags=libmsi"]
+      }
+    }
+  }
+}
