@@ -13,6 +13,41 @@ automation API) and, on Linux and macOS, by linking directly against the
 go build -tags libmsi -o ./bin/intunewin ./cmd/cli
 ```
 
+## Dependencies
+
+### Go
+
+A Go toolchain matching the version in [`go.mod`](go.mod) is required to build the
+project.
+
+### MSI metadata (Linux and macOS)
+
+Reading the metadata of an `.msi` setup file requires the `libmsi` C library from
+[msitools](https://gitlab.gnome.org/GNOME/msitools). It is linked via cgo when
+building with the `libmsi` build tag, so the development headers and library must
+be installed **at build time**.
+
+- **Debian / Ubuntu**
+  ```sh
+  sudo apt-get install libmsi-dev
+  ```
+- **macOS (Homebrew)**
+  ```sh
+  brew install msitools
+  ```
+- **Fedora**
+  ```sh
+  sudo dnf install libmsi1-devel
+  ```
+
+The `msitools` package also provides `wixl`, which is used to build the MSI test
+fixture when running the test suite.
+
+### Windows
+
+No extra dependencies are required. MSI metadata is read through the built-in
+Windows Installer automation API.
+
 ## Usage
 
 ## Intunewin Package Structure
