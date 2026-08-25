@@ -67,6 +67,7 @@ func (m *msiReader) Read() (*data.MSIProperties, error) {
 	database := &data.Database{
 		Registry:    map[string]string{},
 		Filesystems: map[string]string{},
+		Components:  map[string]string{},
 		Directories: map[string]string{},
 	}
 	if err := readTables(db, database); err != nil {
@@ -159,7 +160,10 @@ func readTables(db *ole.IDispatch, database *data.Database) error {
 	if err := readKeyValue(db, "SELECT Registry, Root FROM Registry", database.Registry, parseRegistryRoot); err != nil {
 		return err
 	}
-	if err := readKeyValue(db, "SELECT FileName, Directory_ FROM File", database.Filesystems, identity); err != nil {
+	if err := readKeyValue(db, "SELECT FileName, Component_ FROM File", database.Filesystems, identity); err != nil {
+		return err
+	}
+	if err := readKeyValue(db, "SELECT Component, Directory_ FROM Component", database.Components, identity); err != nil {
 		return err
 	}
 	if err := readKeyValue(db, "SELECT Directory, Directory_Parent FROM Directory", database.Directories, identity); err != nil {

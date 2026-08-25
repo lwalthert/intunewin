@@ -16,16 +16,18 @@ func TestReadMSI(t *testing.T) {
 					"Package Code":    "{PKG-GUID}",
 				},
 				Properties: map[string]string{
-					"ProductCode":  "{PROD-GUID}",
-					"UpgradeCode":  "{UPG-GUID}",
-					"Manufacturer": "Contoso",
-					"ALLUSERS":     "1",
+					"ProductCode":    "{PROD-GUID}",
+					"ProductVersion": "1.2.3.4",
+					"UpgradeCode":    "{UPG-GUID}",
+					"Manufacturer":   "Contoso",
+					"ALLUSERS":       "1",
 				},
 				Database: &Database{
 					Services:        []string{"svc1"},
 					ODBCDataSources: []string{"dsn1"},
 					Registry:        map[string]string{"reg1": "2"},
-					Filesystems:     map[string]string{"app.exe": "TARGETDIR"},
+					Filesystems:     map[string]string{"app.exe": "comp1"},
+					Components:      map[string]string{"comp1": "TARGETDIR"},
 					Directories:     map[string]string{"TARGETDIR": "ProgramFilesFolder"},
 				},
 			},
@@ -49,12 +51,14 @@ func TestReadMSI(t *testing.T) {
 			props: &MSIProperties{
 				Summary: map[string]string{"Revision Number": "2.0.0"},
 				Properties: map[string]string{
-					"ProductCode": "{PROD2}",
-					"ALLUSERS":    "",
+					"ProductCode":    "{PROD2}",
+					"ProductVersion": "2.0.0",
+					"ALLUSERS":       "",
 				},
 				Database: &Database{
 					Registry:    map[string]string{"reg1": "1"}, // per-user root
-					Filesystems: map[string]string{"u.exe": "LocalAppDataFolder"},
+					Filesystems: map[string]string{"u.exe": "comp2"},
+					Components:  map[string]string{"comp2": "LocalAppDataFolder"},
 					Directories: map[string]string{"LocalAppDataFolder": "TARGETDIR"},
 				},
 			},

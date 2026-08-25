@@ -46,10 +46,14 @@ type Database struct {
 	// any other value).
 	Registry map[string]string
 	// Filesystems maps the primary key of a File table row (the FileName) to
-	// the identifier of the directory the file is installed into.
+	// the identifier of the component that owns the file.
 	Filesystems map[string]string
+	// Components maps a Component identifier to the directory identifier the
+	// component is installed into.
+	Components map[string]string
 	// Directories maps a Directory identifier to its parent identifier,
-	// allowing File->Directory references to be resolved to a root folder.
+	// allowing File->Component->Directory references to be resolved to a root
+	// folder.
 	Directories map[string]string
 }
 
@@ -71,7 +75,7 @@ var systemFolders = map[string]bool{
 
 // ReadMSI fills msi from the raw MSI properties and database rows in props.
 func ReadMSI(msi *MSI, props *MSIProperties) {
-	msi.ProductVersion = props.Summary["Revision Number"]
+	msi.ProductVersion = props.Properties["ProductVersion"]
 	msi.ProductCode = props.Properties["ProductCode"]
 	msi.PackageCode = props.Summary["Package Code"]
 	msi.UpgradeCode = props.Properties["UpgradeCode"]
@@ -146,10 +150,12 @@ func containsSystemRegistryKeys(db *Database) bool {
 }
 
 // containsSystemFolders reports whether the MSI installs files into the
-// Windows or system directories. The File table references directories by
-// identifier which are resolved through the Directory table's parent chain.
+// Windows or system directories. Files reference a component, which in turn
+// references a directory; the directory's parent chain is walked to a known
+// system folder root.
 func containsSystemFolders(db *Database) bool {
-	for _, dir := range db.Filesystems {
+	for _, component := range db.Filesystems {
+		dir := db.Components[component]
 		if resolvesToSystemFolder(dir, db.Directories) {
 			return true
 		}

@@ -3,8 +3,14 @@
 This projects tries to implement the functionality of the [Microsoft Win32 Content Prep Tool](https://github.com/Microsoft/Microsoft-Win32-Content-Prep-Tool) in golang.
 It was made out of frustration with Microsoft's unwillingness to fix bugs in the official tool and regularly breaking it for months after new releases. It is also mostly
 crossplatform. Reading the metadata of an .msi setup file (which is stored in the
-MsiInfo section of Detection.xml) is the one part that requires Windows, because it
-uses the Windows Installer automation API.
+MsiInfo section of Detection.xml) is supported on Windows (via the Windows Installer
+automation API) and, when built with the `msitools` build tag, on Linux and macOS
+(via the [msitools](https://gitlab.gnome.org/GNOME/msitools) `msiinfo` command).
+
+```sh
+# Build with msitools support for reading .msi metadata on Linux/macOS
+go build -tags msitools -o ./bin/intunewin ./cmd/cli
+```
 
 ## Usage
 

@@ -67,14 +67,14 @@ func main() {
 		}
 		iw, err := pkg.OpenFile(*extractFile)
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatal(err)
 		}
 
 		defer iw.Close()
 
 		err = iw.ExtractContent()
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatal(err)
 		}
 	default:
 		printHelp()

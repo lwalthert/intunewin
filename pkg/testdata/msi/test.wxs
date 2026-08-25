@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="11111111-2222-3333-4444-555555555555"
+           Name="TestApp"
+           Language="1033"
+           Version="1.2.3.4"
+           Manufacturer="Contoso"
+           UpgradeCode="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="TestApp">
+          <Component Id="MainComponent" Guid="*">
+            <File Id="MainFile" Source="app.txt" />
+            <ServiceInstall Id="SvcInstall" Type="ownProcess" Name="TestSvc"
+                            DisplayName="Test Service" Start="auto" ErrorControl="normal" />
+            <ServiceControl Id="SvcControl" Name="TestSvc" Start="install" Stop="both" Remove="uninstall" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="MainFeature" Title="Main Feature" Level="1">
+      <ComponentRef Id="MainComponent" />
+    </Feature>
+  </Product>
+</Wix>
