@@ -1,15 +1,15 @@
 build:
 	go build -o ./bin/intunewin ./cmd/cli
 
-# Build with msitools support so .msi metadata can be read on Linux/macOS.
-# Requires the msitools "msiinfo" command to be installed at runtime.
-build-msitools:
-	go build -tags msitools -o ./bin/intunewin ./cmd/cli
+# Build linking directly against the libmsi C library (cgo). Requires the
+# libmsi development headers and library to be installed at build time.
+build-libmsi:
+	go build -tags libmsi -o ./bin/intunewin ./cmd/cli
 
-# Run the test suite, including the msitools-backed MSI reader tests.
-# Requires msitools (for msiinfo and wixl) to be installed.
-test-msitools:
-	go test -tags msitools ./...
+# Run the test suite against the libmsi (cgo) MSI reader.
+# Requires libmsi and wixl to be installed.
+test-libmsi:
+	go test -tags libmsi ./...
 
 testpackage:
 	./bin/intunewin -c ./tmp/setup -s Install.ps1 -o ./tmp

@@ -1,4 +1,4 @@
-//go:build msitools
+//go:build libmsi
 
 package pkg
 
@@ -32,8 +32,8 @@ func buildTestMSI(t *testing.T) string {
 	return out
 }
 
-// TestMSIReader_RealFile validates the msitools reader against a real MSI file
-// built from the WiX fixture. It is skipped when wixl is not installed.
+// TestMSIReader_RealFile validates the libmsi (cgo) reader against a real MSI
+// file built from the WiX fixture. It is skipped when wixl is not installed.
 func TestMSIReader_RealFile(t *testing.T) {
 	msi := buildTestMSI(t)
 

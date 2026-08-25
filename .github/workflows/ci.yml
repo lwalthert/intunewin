@@ -18,16 +18,19 @@ jobs:
             os: ubuntu-latest
             tags: ""
             install_msitools: false
-          # msitools build: reads .msi metadata on Linux via msiinfo/wixl.
-          - name: linux-msitools
+            install_libmsi: false
+          # libmsi build: links directly against the libmsi C library via cgo.
+          - name: linux-libmsi
             os: ubuntu-latest
-            tags: msitools
+            tags: libmsi
             install_msitools: true
+            install_libmsi: true
           # Windows build (uses the Windows Installer automation API).
           - name: windows
             os: windows-latest
             tags: ""
             install_msitools: false
+            install_libmsi: false
 
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +43,10 @@ jobs:
       - name: Install msitools
         if: matrix.install_msitools
         run: sudo apt-get update && sudo apt-get install -y msitools
+
+      - name: Install libmsi dev headers
+        if: matrix.install_libmsi
+        run: sudo apt-get install -y libmsi-dev
 
       - name: Build
         run: go build ./...

@@ -1,10 +1,44 @@
 package pkg
 
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"strings"
+)
+
 // msiTable is a parsed MSI database table: the column names (row 1 of the
 // msitools export format) and the data rows.
 type msiTable struct {
 	columns []string
 	rows    [][]string
+}
+
+// parseExportTable parses the tab-separated output of "msiinfo export" (or
+// libmsi_database_export), which has three header lines before the data rows:
+// row 1 column names, row 2 column types, row 3 table name + primary keys.
+func parseExportTable(data []byte, table string) (*msiTable, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	if !scanner.Scan() {
+		return nil, fmt.Errorf("msi export %s: empty output", table)
+	}
+	columns := strings.Split(scanner.Text(), "\t")
+	// Skip the column types and table-name/primary-key header rows.
+	scanner.Scan()
+	scanner.Scan()
+
+	t := &msiTable{columns: columns}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		t.rows = append(t.rows, strings.Split(line, "\t"))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // columnIndex returns the 0-based index of the named column, or -1 if absent.
