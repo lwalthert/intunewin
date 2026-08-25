@@ -51,13 +51,27 @@ type Intunewin struct {
 // Returns a pointer to the new intunewin file
 func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, error) {
 	// Validate the input
-	ok := validator.NotBlank(name)
-	if !ok {
+	if !validator.NotBlank(name) {
 		return nil, errors.New("input string cannot be blank")
 	}
 
-	ok = validator.FileIsInDirectory(setupFile, contentPath)
-	if !ok {
+	if !validator.NotBlank(setupFile) {
+		return nil, errors.New("setup file cannot be blank")
+	}
+
+	if !validator.IsRelativePath(setupFile) {
+		return nil, fmt.Errorf("setup file %s must be a file name or relative path, not an absolute path", setupFile)
+	}
+
+	if !validator.PathIsExists(contentPath, validator.Directory) {
+		return nil, fmt.Errorf("content folder %s does not exist or is not a directory", contentPath)
+	}
+
+	if !validator.PathIsExists(outputPath, validator.Directory) {
+		return nil, fmt.Errorf("output folder %s does not exist or is not a directory", outputPath)
+	}
+
+	if !validator.FileIsInDirectory(setupFile, contentPath) {
 		return nil, fmt.Errorf("setup file %s is not in content folder %s", setupFile, contentPath)
 	}
 
@@ -164,7 +178,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		return nil, err
 	}
 
-	encryptedContent, mac, err := iw.EncryptContentArchive(contentArchive)
+	encryptedContent, mac, err := iw.encryptContentArchive(contentArchive)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +404,7 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 }
 
 // encryptContentArchive() encrypts the file
-func (iw *Intunewin) EncryptContentArchive(input io.Reader) (*os.File, []byte, error) {
+func (iw *Intunewin) encryptContentArchive(input io.Reader) (*os.File, []byte, error) {
 	// Create an output file, the handle is passed on to the caller
 	// If there is an error the file is deleted with os.Remove(output.Name())
 	output, err := os.CreateTemp("", "IntunePackage*.intunewin")

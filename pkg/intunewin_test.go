@@ -145,3 +145,46 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 		t.Fatal("OpenFile() error = nil, want an error for tampered content")
 	}
 }
+
+func TestNewIntunewin_Validation(t *testing.T) {
+	contentDir := writeContentDir(t, "setup.exe", []byte("data"))
+	outputDir := t.TempDir()
+
+	// Create a setup file in a subdirectory so we can exercise relative paths
+	// such as "bin/setup.exe".
+	subDir := filepath.Join(contentDir, "bin")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "setup.exe"), []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name        string
+		nameArg     string
+		contentPath string
+		setupFile   string
+		outputPath  string
+		wantErr     bool
+	}{
+		{"valid", "TestApp", contentDir, "setup.exe", outputDir, false},
+		{"valid relative path", "TestApp", contentDir, "bin/setup.exe", outputDir, false},
+		{"blank name", "", contentDir, "setup.exe", outputDir, true},
+		{"blank setup file", "TestApp", contentDir, "", outputDir, true},
+		{"missing content dir", "TestApp", filepath.Join(contentDir, "nope"), "setup.exe", outputDir, true},
+		{"content dir is a file", "TestApp", filepath.Join(contentDir, "setup.exe"), "setup.exe", outputDir, true},
+		{"missing output dir", "TestApp", contentDir, "setup.exe", filepath.Join(outputDir, "nope"), true},
+		{"setup file not in content dir", "TestApp", contentDir, "other.exe", outputDir, true},
+		{"setup file is an absolute path", "TestApp", contentDir, filepath.Dir(contentDir) + "/setup.exe", outputDir, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewIntunewin(tt.nameArg, tt.contentPath, tt.setupFile, tt.outputPath)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("NewIntunewin() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
