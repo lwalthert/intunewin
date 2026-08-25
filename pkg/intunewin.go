@@ -68,17 +68,30 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	}
 
 	iw.applicationInfo.SetupFile = path.Base(setupPath)
+
+	// If the setup file is an MSI package, read its metadata and populate the
+	// MsiInfo section of Detection.xml. This is only supported on Windows
+	// (where Windows Installer is available); elsewhere the metadata stays
+	// empty and a broken or unreadable MSI is reported as an error.
+	if strings.EqualFold(path.Ext(setupPath), ".msi") {
+		reader, err := OpenMSI(setupPath)
+		if err != nil {
+			return nil, err
+		}
+
+		props, err := reader.Read()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read msi metadata: %w", err)
+		}
+
+		data.ReadMSI(&iw.applicationInfo.MSIInfo, props)
+	}
+
 	// The FileName metadata field always refers to the name of the
 	// encrypted content archive stored inside the package, which is
 	// constant, not to the name of the .intunewin file itself.
 	iw.applicationInfo.FileName = outputFileName
 	iw.Name = name
-
-	// TODO: handle msi setup files
-	// The setup information that is stored in the msi file can be
-	// extracted using window installer. This is probably only possible
-	// on windows.
-	// It is written to the metadata file in the intunewin file.
 
 	// Create the intunewin file
 	iw.Path = path.Join(outputPath, name+".intunewin")

@@ -25,20 +25,3 @@ func NewApplicationInfo(name, setupFile, toolVersion string) *ApplicationInfo {
 		XMLSchemaIns: "http://www.w3.org/2001/XMLSchema-instance",
 	}
 }
-
-type MSI struct {
-	ProductCode                string `xml:"MsiProductCode"`    // guid
-	ProductVersion             string `xml:"MsiProductVersion"` // version string
-	PackageCode                string `xml:"MsiPackageCode"`    // guid
-	UpgradeCode                string `xml:"MsiUpgradeCode"`    // guid
-	ExecutionContext           string `xml:"MsiExecutionContext"`
-	RequiresLogon              bool   `xml:"MsiRequiresLogon"`
-	RequiresReboot             bool   `xml:"MsiRequiresReboot"`
-	IsMachineInstall           bool   `xml:"MsiIsMachineInstall"`
-	IsUserInstall              bool   `xml:"MsiIsUserInstall"`
-	IncludesServices           bool   `xml:"MsiIncludesServices"`
-	IncludesODBCDataSource     bool   `xml:"MsiIncludesODBCDataSource"`
-	ContainsSystemRegistryKeys bool   `xml:"MsiContainsSystemRegistryKeys"`
-	ContainsSystemFolders      bool   `xml:"MsiContainsSystemFolders"`
-	Publisher                  string `xml:"MsiPublisher"`
-}
