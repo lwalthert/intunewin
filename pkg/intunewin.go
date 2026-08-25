@@ -68,6 +68,10 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	}
 
 	iw.applicationInfo.SetupFile = path.Base(setupPath)
+	// The FileName metadata field always refers to the name of the
+	// encrypted content archive stored inside the package, which is
+	// constant, not to the name of the .intunewin file itself.
+	iw.applicationInfo.FileName = outputFileName
 	iw.Name = name
 
 	// TODO: handle msi setup files
@@ -77,7 +81,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	// It is written to the metadata file in the intunewin file.
 
 	// Create the intunewin file
-	iw.Path = path.Join(outputPath, iw.applicationInfo.FileName)
+	iw.Path = path.Join(outputPath, name+".intunewin")
 	output, err := os.Create(iw.Path)
 	if err != nil {
 		return nil, err
@@ -105,9 +109,9 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	iw.macKey = macKey
 
 	iw.applicationInfo.EncryptionInfo = *data.NewEncryptionInfo(
-		base64.RawStdEncoding.EncodeToString(iw.aesKey),
-		base64.RawStdEncoding.EncodeToString(iw.aesIV),
-		base64.RawStdEncoding.EncodeToString(iw.macKey),
+		base64.StdEncoding.EncodeToString(iw.aesKey),
+		base64.StdEncoding.EncodeToString(iw.macKey),
+		base64.StdEncoding.EncodeToString(iw.aesIV),
 		fileDigestAlgo,
 		data.ProfileVersion1)
 
@@ -259,7 +263,7 @@ func OpenFile(file string) (*Intunewin, error) {
 
 	// Skip the first 32 bytes that contain the HMAC of the file
 	fileMAC := make([]byte, 32)
-	_, err = content.Read(fileMAC)
+	_, err = io.ReadFull(content, fileMAC)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +327,7 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 
 	// Create a reader for the input and discard the first 48 bytes (MAC + IV)
 	header := make([]byte, 48)
-	_, err = input.ReadFull(header)
+	_, err = io.ReadFull(input, header)
 	if err != nil {
 		return err
 	}
@@ -482,7 +486,7 @@ func createContentArchive(setupDirectory string, w io.Writer) error {
 		file.Close()
 	}
 
-	return nil
+	return zw.Close()
 }
 
 // writeMetadata()
