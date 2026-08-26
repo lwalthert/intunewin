@@ -5,9 +5,9 @@ import (
 )
 
 // MSIReader reads the metadata of an MSI file so it can populate the MsiInfo
-// section of Detection.xml. Only the Windows implementation actually queries
-// the file (through the Windows Installer automation API); on every other
-// platform Read returns an error and the metadata is left empty.
+// section of Detection.xml. On Windows, it can use the Windows Installer automation
+// API; on Linux and macOS, it uses the built-in CFBF reader (or libmsi if
+// built with the libmsi tag).
 type MSIReader interface {
 	// Path is the location of the MSI file to inspect.
 	Path() string

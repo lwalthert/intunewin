@@ -1,12 +1,12 @@
 # Intunewin
 
 This project tries to implement the functionality of the [Microsoft Win32 Content Prep Tool](https://github.com/Microsoft/Microsoft-Win32-Content-Prep-Tool) in golang.
-It was made out of frustration with Microsoft's unwillingness to fix bugs in the official tool and regularly breaking it for months after new releases. It is also mostly
+It was made out of frustration with Microsoft's unwillingness to fix bugs in the official tool and regularly breaking it for months after new releases. It is fully
 cross-platform. Reading the metadata of an .msi setup file (which is stored in the
-MsiInfo section of Detection.xml) is supported on Windows (via the Windows Installer
-automation API) and, on Linux and macOS, by linking directly against the
-[msitools](https://gitlab.gnome.org/GNOME/msitools) libmsi C library via cgo (the
-`libmsi` build tag). libmsi is LGPL-2.1+.
+MsiInfo section of Detection.xml) is supported out of the box on all platforms (Windows,
+Linux, and macOS) using a built-in Compound File / MSI database reader. Optional
+build tags are also available for using the native Windows Installer automation API (`windows`)
+or linking against the [msitools](https://gitlab.gnome.org/GNOME/msitools) libmsi C library (`libmsi`).
 
 ## AI usage
 
@@ -26,33 +26,13 @@ The following build tags are supported:
 A Go toolchain matching the version in [`go.mod`](go.mod) is required to build the
 project.
 
-### MSI metadata (Linux and macOS)
+### MSI metadata (Linux, macOS, Windows)
 
-Reading the metadata of an `.msi` setup file requires the `libmsi` C library from
-[msitools](https://gitlab.gnome.org/GNOME/msitools). It is linked via cgo when
-building with the `libmsi` build tag, so the development headers and library must
-be installed **at build time**.
+MSI metadata is parsed natively by default without external dependencies.
 
-**Debian / Ubuntu**
-  ```sh
-  sudo apt-get install msitools libmsi-dev libglib2.0-dev
-  ```
-**macOS (Homebrew)**
-  ```sh
-  brew install msitools
-  ```
-**Fedora**
-  ```sh
-  sudo dnf install msitools libmsi1-devel glib2-devel
-  ```
-
-The `msitools` package also provides `wixl`, which is used to build the MSI test
-fixture when running the test suite.
-
-### Windows
-
-No extra dependencies are required. MSI metadata is read through the built-in
-Windows Installer automation API.
+Optional build tags:
+- `libmsi`: link against the `libmsi` C library via cgo (requires `libmsi-dev` / `msitools` headers at build time).
+- `windows`: use the COM-based Windows Installer automation API on Windows.
 
 ## Usage
 
@@ -96,3 +76,11 @@ about msi setups and the encryption information for the "IntunePackage.intunewin
 The file "IntunePackage.intunewin" is an encrypted zip archive that contains the installer. It is encrypted using AES256 in CBC mode with a random IV.
 It is also hashed using HMAC-SHA256. The AES encryption key, IV, HMAC hash, and HMAC key for the encrypted file are found in the "Detection.xml" file. The "Detection.xml"
 file also contains the hash and hashing algorithm and file length of the unencrypted file.
+
+## Credits & Acknowledgements
+
+This project uses and draws inspiration from several libraries, specifications, and tools:
+
+- **[go-ole](https://github.com/go-ole/go-ole)**: Go bindings for the Windows COM automation API used for native Windows MSI metadata extraction.
+- **[msitools / libmsi](https://gitlab.gnome.org/GNOME/msitools)**: GNOME's MSI tools and library, used for `wixl` test fixture generation and the optional `libmsi` CGO build tag.
+- **[mscfb](https://github.com/richardlehane/mscfb) & [msoleps](https://github.com/richardlehane/msoleps)** by Richard Lehane: Reference implementations and format research for Microsoft Compound File Binary Format ([MS-CFB]) and OLE Property Sets ([MS-OLEPS]).
