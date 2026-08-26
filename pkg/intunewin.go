@@ -29,9 +29,9 @@ const (
 )
 
 type Intunewin struct {
-	Name             string               // The name of the intunewin file
-	Path             string               // The path to the intunewin file
-	reader           *zip.ReadCloser      //
+	Name             string // The name of the intunewin file
+	Path             string // The path to the intunewin file
+	reader           *zip.ReadCloser
 	applicationInfo  data.ApplicationInfo // the metadata of the intunewin file
 	contentDir       string               // The path to the content folder
 	contentFile      string               // The path to the content file
@@ -43,78 +43,109 @@ type Intunewin struct {
 	contentHash      []byte
 }
 
-// NewIntunewin creates a new intunewin file
+// PackageIntunewin creates a new intunewin file
 // name: The name of the intunewin file
 // contentPath: The path to the content folder
 // setupFile: The name of the setup file, relative to the content folder
 // outputPath: The path to the output folder
 // Returns a pointer to the new intunewin file
-func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, error) {
-	// Validate the input
-	if !validator.NotBlank(name) {
-		return nil, errors.New("input string cannot be blank")
-	}
-
-	if !validator.NotBlank(setupFile) {
-		return nil, errors.New("setup file cannot be blank")
-	}
-
-	if !validator.IsRelativePath(setupFile) {
-		return nil, fmt.Errorf("setup file %s must be a file name or relative path, not an absolute path", setupFile)
-	}
-
-	if !validator.PathIsExists(contentPath, validator.Directory) {
-		return nil, fmt.Errorf("content folder %s does not exist or is not a directory", contentPath)
-	}
-
-	if !validator.PathIsExists(outputPath, validator.Directory) {
-		return nil, fmt.Errorf("output folder %s does not exist or is not a directory", outputPath)
-	}
-
-	if !validator.FileIsInDirectory(setupFile, contentPath) {
-		return nil, fmt.Errorf("setup file %s is not in content folder %s", setupFile, contentPath)
+func PackageIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, error) {
+	if err := validatePackageIntunewinInput(name, contentPath, setupFile, outputPath); err != nil {
+		return nil, err
 	}
 
 	setupPath := filepath.Join(contentPath, setupFile)
+	iw := newIntunewin(name, setupFile, outputPath, setupPath)
 
+	if err := iw.populateMSIInfo(setupPath); err != nil {
+		return nil, err
+	}
+
+	if err := iw.generateEncryptionKeys(); err != nil {
+		return nil, err
+	}
+
+	return iw.build(contentPath)
+}
+
+func validatePackageIntunewinInput(name, contentPath, setupFile, outputPath string) error {
+	if !validator.NotBlank(name) {
+		return errors.New("input string cannot be blank")
+	}
+	if !validator.NotBlank(setupFile) {
+		return errors.New("setup file cannot be blank")
+	}
+	if !validator.IsRelativePath(setupFile) {
+		return fmt.Errorf("setup file %s must be a file name or relative path, not an absolute path", setupFile)
+	}
+	if !validator.PathIsExists(contentPath, validator.Directory) {
+		return fmt.Errorf("content folder %s does not exist or is not a directory", contentPath)
+	}
+	if !validator.PathIsExists(outputPath, validator.Directory) {
+		return fmt.Errorf("output folder %s does not exist or is not a directory", outputPath)
+	}
+	if !validator.FileIsInDirectory(setupFile, contentPath) {
+		return fmt.Errorf("setup file %s is not in content folder %s", setupFile, contentPath)
+	}
+	return nil
+}
+
+func newIntunewin(name, setupFile, outputPath, setupPath string) *Intunewin {
 	iw := &Intunewin{
 		applicationInfo: *data.NewApplicationInfo(name, setupFile, toolVersion),
+		Name:            name,
+		Path:            filepath.Join(outputPath, name+".intunewin"),
 	}
-
 	iw.applicationInfo.SetupFile = filepath.Base(setupPath)
+	iw.applicationInfo.FileName = outputFileName
+	return iw
+}
 
-	// If the setup file is an MSI package, read its metadata and populate the
-	// MsiInfo section of Detection.xml. This is only supported on Windows
-	// (where Windows Installer is available); elsewhere the metadata stays
-	// empty and a broken or unreadable MSI is reported as an error.
-	if strings.EqualFold(filepath.Ext(setupPath), ".msi") {
-		reader, err := OpenMSI(setupPath)
-		if err != nil {
-			return nil, err
-		}
+func (iw *Intunewin) populateMSIInfo(setupPath string) error {
+	if !strings.EqualFold(filepath.Ext(setupPath), ".msi") {
+		return nil
+	}
+	reader, err := OpenMSI(setupPath)
+	if err != nil {
+		return err
+	}
+	props, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read msi metadata: %w", err)
+	}
+	data.ReadMSI(&iw.applicationInfo.MSIInfo, props)
+	return nil
+}
 
-		props, err := reader.Read()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read msi metadata: %w", err)
-		}
-
-		data.ReadMSI(&iw.applicationInfo.MSIInfo, props)
+func (iw *Intunewin) generateEncryptionKeys() error {
+	var err error
+	if iw.aesIV, err = generateKey(16); err != nil {
+		return err
+	}
+	if iw.aesKey, err = generateKey(32); err != nil {
+		return err
+	}
+	if iw.macKey, err = generateKey(32); err != nil {
+		return err
 	}
 
-	// The FileName metadata field always refers to the name of the
-	// encrypted content archive stored inside the package, which is
-	// constant, not to the name of the .intunewin file itself.
-	iw.applicationInfo.FileName = outputFileName
-	iw.Name = name
+	iw.applicationInfo.EncryptionInfo = *data.NewEncryptionInfo(
+		base64.StdEncoding.EncodeToString(iw.aesKey),
+		base64.StdEncoding.EncodeToString(iw.macKey),
+		base64.StdEncoding.EncodeToString(iw.aesIV),
+		fileDigestAlgo,
+		data.ProfileVersion1,
+	)
+	return nil
+}
 
-	// Create the intunewin file
-	iw.Path = filepath.Join(outputPath, name+".intunewin")
+func (iw *Intunewin) build(contentPath string) (*Intunewin, error) {
 	output, err := os.Create(iw.Path)
 	if err != nil {
 		return nil, err
 	}
-
 	defer output.Close()
+
 	var success bool
 	defer func() {
 		if !success {
@@ -122,125 +153,115 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		}
 	}()
 
-	// Generate the encryption keys and add them to the metadata
-	iv, err := generateKey(16)
+	encryptedPayload, err := iw.prepareEncryptedPayload(contentPath)
 	if err != nil {
 		return nil, err
 	}
-	iw.aesIV = iv
+	defer encryptedPayload.Close()
+	defer os.Remove(encryptedPayload.Name())
 
-	aesKey, err := generateKey(32)
-	if err != nil {
+	if err := iw.writeZipPackage(output, encryptedPayload); err != nil {
 		return nil, err
 	}
-	iw.aesKey = aesKey
 
-	macKey, err := generateKey(32)
-	if err != nil {
+	if err := output.Close(); err != nil {
 		return nil, err
 	}
-	iw.macKey = macKey
 
-	iw.applicationInfo.EncryptionInfo = *data.NewEncryptionInfo(
-		base64.StdEncoding.EncodeToString(iw.aesKey),
-		base64.StdEncoding.EncodeToString(iw.macKey),
-		base64.StdEncoding.EncodeToString(iw.aesIV),
-		fileDigestAlgo,
-		data.ProfileVersion1)
+	success = true
+	return iw, nil
+}
 
-	// Create the IntunewinPackage.zip containing the content of the content folder
+func (iw *Intunewin) prepareContentArchive(contentPath string) (*os.File, error) {
 	contentArchive, err := os.CreateTemp("", "IntunePackage*.zip")
 	if err != nil {
-		// TODO Logging and Error handling
 		return nil, err
 	}
 
-	defer contentArchive.Close()
-	defer os.Remove(contentArchive.Name())
-
-	err = createContentArchive(contentPath, contentArchive)
-	if err != nil {
-		// TODO Logging and Error handling
+	if err := createContentArchive(contentPath, contentArchive); err != nil {
+		contentArchive.Close()
+		os.Remove(contentArchive.Name())
 		return nil, err
 	}
 
 	caStat, err := contentArchive.Stat()
 	if err != nil {
-		// TODO Logging and Error handling
+		contentArchive.Close()
+		os.Remove(contentArchive.Name())
 		return nil, err
 	}
 
 	iw.applicationInfo.UnencryptedContentSize = int(caStat.Size())
 	archiveHash, err := sha256FileHash(contentArchive)
 	if err != nil {
-		// TODO Logging and Error handling
+		contentArchive.Close()
+		os.Remove(contentArchive.Name())
 		return nil, err
 	}
 
 	iw.applicationInfo.EncryptionInfo.FileDigest = archiveHash
 	iw.applicationInfo.EncryptionInfo.FileDigestAlgorithm = "SHA256"
 
-	_, err = contentArchive.Seek(0, 0)
+	if _, err := contentArchive.Seek(0, io.SeekStart); err != nil {
+		contentArchive.Close()
+		os.Remove(contentArchive.Name())
+		return nil, err
+	}
+
+	return contentArchive, nil
+}
+
+func (iw *Intunewin) prepareEncryptedPayload(contentPath string) (*os.File, error) {
+	contentArchive, err := iw.prepareContentArchive(contentPath)
 	if err != nil {
 		return nil, err
 	}
+	defer contentArchive.Close()
+	defer os.Remove(contentArchive.Name())
 
 	encryptedContent, mac, err := iw.encryptContentArchive(contentArchive)
 	if err != nil {
 		return nil, err
 	}
 
-	defer encryptedContent.Close()
-	defer os.Remove(encryptedContent.Name())
-
 	iw.applicationInfo.EncryptionInfo.Mac = base64.StdEncoding.EncodeToString(mac)
 
-	_, err = encryptedContent.Seek(0, 0)
-	if err != nil {
+	if _, err := encryptedContent.Seek(0, io.SeekStart); err != nil {
+		encryptedContent.Close()
+		os.Remove(encryptedContent.Name())
 		return nil, err
 	}
 
-	// Write to zip
-	zipWriter := zip.NewWriter(output)
+	return encryptedContent, nil
+}
 
+func (iw *Intunewin) writeZipPackage(w io.Writer, encryptedContent io.Reader) error {
+	zipWriter := zip.NewWriter(w)
 	defer zipWriter.Close()
 
-	// explicitly using path.Join for ZIP file entries
-	path := path.Join(contentsDir, outputFileName)
+	entryPath := path.Join(contentsDir, outputFileName)
 	fileWriter, err := zipWriter.CreateHeader(&zip.FileHeader{
-		Name:   path,
+		Name:   entryPath,
 		Method: zip.Store,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	_, err = io.Copy(fileWriter, encryptedContent)
-	if err != nil {
-		return nil, err
+	if _, err := io.Copy(fileWriter, encryptedContent); err != nil {
+		return err
 	}
 
-	// Write Metadata
-	fileWriter, err = zipWriter.Create(metadataFile)
+	metadataWriter, err := zipWriter.Create(metadataFile)
 	if err != nil {
-		return nil, err
-	}
-	_, err = iw.writeMetadata(fileWriter)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
-	err = zipWriter.Close()
-	if err != nil {
-		return nil, err
-	}
-	err = output.Close()
-	if err != nil {
-		return nil, err
+	if _, err := iw.writeMetadata(metadataWriter); err != nil {
+		return err
 	}
 
-	success = true
-	return iw, nil
+	return zipWriter.Close()
 }
 
 func OpenFile(file string) (*Intunewin, error) {

@@ -40,7 +40,7 @@ func TestRoundTrip(t *testing.T) {
 	contentDir := writeContentDir(t, "setup.exe", setupContents)
 	outputDir := t.TempDir()
 
-	iw, err := NewIntunewin("TestApp", contentDir, "setup.exe", outputDir)
+	iw, err := PackageIntunewin("TestApp", contentDir, "setup.exe", outputDir)
 	if err != nil {
 		t.Fatalf("NewIntunewin() error = %v", err)
 	}
@@ -101,7 +101,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 	contentDir := writeContentDir(t, "setup.exe", bytes.Repeat([]byte("a"), 5000))
 	outputDir := t.TempDir()
 
-	iw, err := NewIntunewin("TestApp", contentDir, "setup.exe", outputDir)
+	iw, err := PackageIntunewin("TestApp", contentDir, "setup.exe", outputDir)
 	if err != nil {
 		t.Fatalf("NewIntunewin() error = %v", err)
 	}
@@ -181,7 +181,7 @@ func TestNewIntunewin_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewIntunewin(tt.nameArg, tt.contentPath, tt.setupFile, tt.outputPath)
+			_, err := PackageIntunewin(tt.nameArg, tt.contentPath, tt.setupFile, tt.outputPath)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("NewIntunewin() error = %v, wantErr %v", err, tt.wantErr)
 			}
