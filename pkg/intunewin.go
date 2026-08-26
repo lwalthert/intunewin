@@ -225,8 +225,19 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	if err != nil {
 		return nil, err
 	}
+	_, err = iw.writeMetadata(fileWriter)
+	if err != nil {
+		return nil, err
+	}
 
-	iw.writeMetadata(fileWriter)
+	err = zipWriter.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = output.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	success = true
 	return iw, nil
