@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,74 +13,104 @@ import (
 const version = "1.0.0"
 
 func main() {
-	generate := flag.NewFlagSet("generate", flag.ExitOnError)
-	contentDir := generate.String("c", "", "Setup folder for all setup files. All files in this folder will be compressed into .intunewin file.")
-	setupFile := generate.String("s", "", "Setup file (e.g. setup.exe or setup.msi).")
-	outputDir := generate.String("o", "", "Output folder for the generated .intunewin file.")
-	// catalogDir := generate.String("a", "", "Catalog folder for all catalog files. All files in this folder will be treated as catalog file for Win10 S mode.")
-	// quietRun := generate.Bool("q", false, "If -q is specified, it will be in quiet mode. If the output file already exists, it will be overwritten.")
+	flags := flag.NewFlagSet("intunewin", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
 
-	extract := flag.NewFlagSet("extract", flag.ExitOnError)
-	extractFile := extract.String("e", "", "Path to the .intunewin file to extract.")
+	// Microsoft Win32 Content Prep Tool compatible flags
+	contentDir := flags.String("c", "", "Setup folder for all setup files. All files in this folder will be compressed into .intunewin file.")
+	setupFile := flags.String("s", "", "Setup file (e.g. setup.exe or setup.msi), relative to the setup folder.")
+	outputDir := flags.String("o", "", "Output folder for the generated .intunewin file (or extracted contents).")
+	quiet := flags.Bool("q", false, "Quiet mode (suppress unnecessary output).")
+	_ = flags.String("a", "", "Catalog folder for Win10 S mode (optional compatibility flag).")
 
-	if len(os.Args) < 2 {
+	// Extraction and utility flags
+	extractFile := flags.String("e", "", "Path to the .intunewin file to extract.")
+	showVersion := flags.Bool("v", false, "Display intunewin version.")
+	showHelp := flags.Bool("h", false, "Display help information.")
+
+	flags.Usage = printHelp
+
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		os.Exit(2)
+	}
+
+	if *showVersion {
+		fmt.Fprintf(os.Stdout, "intunewin version %s\n", version)
+		return
+	}
+
+	if *showHelp || len(os.Args) == 1 {
 		printHelp()
+		if len(os.Args) == 1 {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode 1: Extraction (-e)
+	if *extractFile != "" {
+		if *contentDir != "" || *setupFile != "" {
+			fmt.Fprintln(os.Stderr, "error: cannot specify packaging flags (-c, -s) when extracting (-e)")
+			os.Exit(1)
+		}
+
+		iw, err := pkg.OpenPackage(*extractFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: failed to open package: %v\n", err)
+			os.Exit(1)
+		}
+		defer iw.Close()
+
+		targetDir := *outputDir
+		if targetDir == "" {
+			var err error
+			targetDir, err = os.Getwd()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: failed to get working directory: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		if err := iw.ExtractContent(targetDir); err != nil {
+			fmt.Fprintf(os.Stderr, "error: extraction failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		if !*quiet {
+			fmt.Fprintf(os.Stdout, "Extracted package to %s\n", targetDir)
+		}
+		return
+	}
+
+	// Mode 2: Packaging (-c, -s, -o)
+	if *contentDir == "" || *setupFile == "" || *outputDir == "" {
+		fmt.Fprintln(os.Stderr, "error: missing required arguments: -c, -s, and -o are required to create a package")
+		fmt.Fprintln(os.Stderr, "run 'intunewin -h' for usage information")
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
-	case "-v":
-		fmt.Fprintf(os.Stdout, "intunewin version: %s\n", version)
-	case "-h":
-		printHelp()
-		generate.Usage()
-		extract.Usage()
-	case "-c":
-		err := generate.Parse(os.Args[1:])
-		if err != nil {
-			generate.Usage()
-			os.Exit(1)
-		}
-
-		contentDir, err := filepath.Abs(*contentDir)
-		if err != nil {
-			log.Fatal(err)
-		}
-		outputDir, err := filepath.Abs(*outputDir)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		name := strings.TrimSuffix(filepath.Base(*setupFile), filepath.Ext(*setupFile))
-
-		p := pkg.NewPackager(name, contentDir, *setupFile, outputDir)
-		_, err = p.Package()
-		if err != nil {
-			log.Fatal(err)
-		}
-	case "-e":
-		err := extract.Parse(os.Args[1:])
-		if err != nil {
-			extract.Usage()
-			os.Exit(1)
-		}
-		iw, err := pkg.OpenPackage(*extractFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer iw.Close()
-
-		wd, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
-		}
-		err = iw.ExtractContent(wd)
-		if err != nil {
-			log.Fatal(err)
-		}
-	default:
-		printHelp()
+	absContentDir, err := filepath.Abs(*contentDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: invalid content directory: %v\n", err)
 		os.Exit(1)
+	}
+
+	absOutputDir, err := filepath.Abs(*outputDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: invalid output directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	name := strings.TrimSuffix(filepath.Base(*setupFile), filepath.Ext(*setupFile))
+	packager := pkg.NewPackager(name, absContentDir, *setupFile, absOutputDir)
+
+	pkgResult, err := packager.Package()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: packaging failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !*quiet {
+		fmt.Fprintf(os.Stdout, "Successfully created %s\n", pkgResult.Path)
 	}
 }
