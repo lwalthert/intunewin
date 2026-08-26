@@ -12,7 +12,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -75,19 +74,19 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		return nil, fmt.Errorf("setup file %s is not in content folder %s", setupFile, contentPath)
 	}
 
-	setupPath := path.Join(contentPath, setupFile)
+	setupPath := filepath.Join(contentPath, setupFile)
 
 	iw := &Intunewin{
 		applicationInfo: *data.NewApplicationInfo(name, setupFile, toolVersion),
 	}
 
-	iw.applicationInfo.SetupFile = path.Base(setupPath)
+	iw.applicationInfo.SetupFile = filepath.Base(setupPath)
 
 	// If the setup file is an MSI package, read its metadata and populate the
 	// MsiInfo section of Detection.xml. This is only supported on Windows
 	// (where Windows Installer is available); elsewhere the metadata stays
 	// empty and a broken or unreadable MSI is reported as an error.
-	if strings.EqualFold(path.Ext(setupPath), ".msi") {
+	if strings.EqualFold(filepath.Ext(setupPath), ".msi") {
 		reader, err := OpenMSI(setupPath)
 		if err != nil {
 			return nil, err
@@ -108,7 +107,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	iw.Name = name
 
 	// Create the intunewin file
-	iw.Path = path.Join(outputPath, name+".intunewin")
+	iw.Path = filepath.Join(outputPath, name+".intunewin")
 	output, err := os.Create(iw.Path)
 	if err != nil {
 		return nil, err
@@ -206,7 +205,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	defer zipWriter.Close()
 
 	// Write Content
-	path := path.Join(contentsDir, outputFileName)
+	path := filepath.Join(contentsDir, outputFileName)
 	fileWriter, err := zipWriter.CreateHeader(&zip.FileHeader{
 		Name:   path,
 		Method: zip.Store,
@@ -283,7 +282,7 @@ func OpenFile(file string) (*Intunewin, error) {
 	}
 
 	// Set the variable contentfile
-	iw.contentFile = path.Join("IntuneWinPackage/Contents/", iw.applicationInfo.FileName)
+	iw.contentFile = filepath.Join("IntuneWinPackage/Contents/", iw.applicationInfo.FileName)
 
 	// Validate the HMAC value
 	// 1. Open the content file
@@ -503,10 +502,12 @@ func createContentArchive(setupDirectory string, w io.Writer) error {
 		defer file.Close()
 
 		// Strip the setupDirectory from the file path
-		partialPath, _ := strings.CutPrefix(f, setupDirectory)
-		partialPath, _ = strings.CutPrefix(partialPath, "/")
-
-		fw, err := zw.Create(partialPath)
+		rel, err := filepath.Rel(setupDirectory, f)
+		if err != nil {
+			return err
+		}
+		zipPath := filepath.ToSlash(rel)
+		fw, err := zw.Create(zipPath)
 		if err != nil {
 			return err
 		}
