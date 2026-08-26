@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"hash"
@@ -126,4 +127,23 @@ func sha256FileHash(input *os.File) (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(hash.Sum(nil)), nil
+}
+
+func decodeBase64Key(input string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(input)
+	if err != nil {
+		return nil, err
+	}
+
+	return key, nil
+}
+
+func generateKey(length int) ([]byte, error) {
+	key := make([]byte, length)
+	_, err := rand.Read(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return key, nil
 }

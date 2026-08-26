@@ -38,9 +38,6 @@ type Package struct {
 	contentHash      []byte
 }
 
-// Intunewin is an alias for Package for backward compatibility.
-type Intunewin = Package
-
 // OpenFile opens an existing .intunewin file for reading and extraction.
 func OpenFile(file string) (*Package, error) {
 	iw := new(Package)
