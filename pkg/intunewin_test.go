@@ -67,7 +67,7 @@ func TestRoundTrip(t *testing.T) {
 		}
 	}()
 
-	if err := opened.ExtractContent(); err != nil {
+	if err := opened.ExtractContent(extractDir); err != nil {
 		t.Fatalf("ExtractContent() error = %v", err)
 	}
 

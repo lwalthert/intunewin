@@ -72,7 +72,11 @@ func main() {
 
 		defer iw.Close()
 
-		err = iw.ExtractContent()
+		wd, err := os.Getwd()
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = iw.ExtractContent(wd)
 		if err != nil {
 			log.Fatal(err)
 		}
