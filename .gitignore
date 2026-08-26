@@ -1,5 +1,6 @@
 # tmp for local testing and builds
 tmp/
+.cache/
 
 # contains builds of the file
 bin/
