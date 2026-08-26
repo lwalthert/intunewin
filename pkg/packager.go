@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -304,9 +303,8 @@ func (p *Packager) writeZipPackage(w io.Writer, encryptedContent io.Reader) erro
 	zipWriter := zip.NewWriter(w)
 	defer zipWriter.Close()
 
-	entryPath := path.Join(contentsDir, contentFileName)
 	fileWriter, err := zipWriter.CreateHeader(&zip.FileHeader{
-		Name:   entryPath,
+		Name:   contentFile,
 		Method: zip.Store,
 	})
 	if err != nil {
@@ -322,23 +320,15 @@ func (p *Packager) writeZipPackage(w io.Writer, encryptedContent io.Reader) erro
 		return err
 	}
 
-	if _, err := p.writeMetadata(metadataWriter); err != nil {
+	out, err := xml.MarshalIndent(&p.applicationInfo, " ", " ")
+	if err != nil {
+		return err
+	}
+	if _, err := metadataWriter.Write(out); err != nil {
 		return err
 	}
 
 	return zipWriter.Close()
-}
-
-func (p *Packager) writeMetadata(w io.Writer) (int, error) {
-	out, err := xml.MarshalIndent(&p.applicationInfo, " ", " ")
-	if err != nil {
-		return 0, err
-	}
-	n, err := w.Write(out)
-	if err != nil {
-		return n, err
-	}
-	return n, nil
 }
 
 func createContentArchive(setupDirectory string, w io.Writer) error {
