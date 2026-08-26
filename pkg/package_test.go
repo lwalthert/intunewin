@@ -25,9 +25,9 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("PackageIntunewin() error = %v", err)
 	}
 
-	opened, err := OpenFile(p.Path)
+	opened, err := OpenPackage(p.Path)
 	if err != nil {
-		t.Fatalf("OpenFile() error = %v", err)
+		t.Fatalf("OpenPackage() error = %v", err)
 	}
 	defer opened.Close()
 
@@ -81,7 +81,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 	var offset int64
 	found := false
 	for _, zf := range r.File {
-		if zf.Name == contentsDir+outputFileName {
+		if zf.Name == contentsDir+contentFileName {
 			offset, err = zf.DataOffset()
 			if err != nil {
 				t.Fatalf("failed to get data offset: %v", err)
@@ -91,7 +91,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 	}
 	r.Close()
 	if !found {
-		t.Fatalf("content entry %s not found in packaged file", contentsDir+outputFileName)
+		t.Fatalf("content entry %s not found in packaged file", contentsDir+contentFileName)
 	}
 
 	raw, err := os.OpenFile(p.Path, os.O_RDWR, 0644)
@@ -106,23 +106,23 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 		t.Fatalf("failed to close tampered file: %v", err)
 	}
 
-	if _, err := OpenFile(p.Path); err == nil {
-		t.Fatal("OpenFile() error = nil, want an error for tampered content")
+	if _, err := OpenPackage(p.Path); err == nil {
+		t.Fatal("OpenPackage() error = nil, want an error for tampered content")
 	}
 }
 
 func TestOpenFile_InvalidFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nonexistent.intunewin")
-	if _, err := OpenFile(missing); err == nil {
-		t.Error("OpenFile() error = nil for nonexistent file, want error")
+	if _, err := OpenPackage(missing); err == nil {
+		t.Error("OpenPackage() error = nil for nonexistent file, want error")
 	}
 
 	invalidZip := filepath.Join(t.TempDir(), "corrupt.intunewin")
 	if err := os.WriteFile(invalidZip, []byte("not a zip file"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := OpenFile(invalidZip); err == nil {
-		t.Error("OpenFile() error = nil for non-zip file, want error")
+	if _, err := OpenPackage(invalidZip); err == nil {
+		t.Error("OpenPackage() error = nil for non-zip file, want error")
 	}
 }
 

@@ -27,17 +27,17 @@ Reading the metadata of an `.msi` setup file requires the `libmsi` C library fro
 building with the `libmsi` build tag, so the development headers and library must
 be installed **at build time**.
 
-- **Debian / Ubuntu**
+**Debian / Ubuntu**
   ```sh
-  sudo apt-get install libmsi-dev
+  sudo apt-get install libmsi-dev, libglib2.0-dev
   ```
-- **macOS (Homebrew)**
+**macOS (Homebrew)**
   ```sh
-  brew install msitools
+  brew install msitools, wixl
   ```
-- **Fedora**
+**Fedora**
   ```sh
-  sudo dnf install libmsi1-devel
+  sudo dnf install libmsi1-devel, glib2-devel
   ```
 
 The `msitools` package also provides `wixl`, which is used to build the MSI test

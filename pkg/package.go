@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	metadataFile   = "IntuneWinPackage/Metadata/Detection.xml" // The path to the metadata file contained in the intunewin file
-	contentsDir    = "IntuneWinPackage/Contents/"
-	outputFileName = "IntunePackage.intunewin" // The name of the encrypted content file
-	toolVersion    = "1.4.0.0"
-	fileDigestAlgo = "SHA256"
+	metadataFile    = "IntuneWinPackage/Metadata/Detection.xml" // The path to the metadata file contained in the intunewin file
+	contentFile     = "IntuneWinPackage/Contents/IntunePackage.intunewin"
+	contentsDir     = "IntuneWinPackage/Contents/"
+	contentFileName = "IntunePackage.intunewin" // The name of the encrypted content file
+	toolVersion     = "1.4.0.0"
+	fileDigestAlgo  = "SHA256"
 )
 
 // Package represents an .intunewin package.
@@ -28,8 +29,6 @@ type Package struct {
 	Path             string // The path to the intunewin file
 	reader           *zip.ReadCloser
 	applicationInfo  data.ApplicationInfo // The metadata of the intunewin file
-	contentDir       string               // The path to the content folder
-	contentFile      string               // The path to the content file
 	validContentFile bool
 	aesKey           []byte
 	aesIV            []byte
@@ -38,77 +37,74 @@ type Package struct {
 	contentHash      []byte
 }
 
-// OpenFile opens an existing .intunewin file for reading and extraction.
-func OpenFile(file string) (*Package, error) {
-	iw := new(Package)
-	iw.Path = file
+// OpenPackage opens an existing .intunewin file for reading and extraction.
+func OpenPackage(path string) (*Package, error) {
+	p := new(Package)
+	p.Path = path
 
 	// Open the intunewin archive for reading.
-	r, err := zip.OpenReader(file)
+	r, err := zip.OpenReader(path)
 	if err != nil {
 		return nil, err
 	}
 
-	iw.reader = r
+	p.reader = r
 
 	// Open the file 'IntuneWinPackage/Metadata/Detection.xml' for deserialization.
 	f, err := r.Open(metadataFile)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 	defer f.Close()
 
 	// Decode the xml
 	dec := xml.NewDecoder(f)
-	err = dec.Decode(&iw.applicationInfo)
+	err = dec.Decode(&p.applicationInfo)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 
-	iw.Name = iw.applicationInfo.Name
+	p.Name = p.applicationInfo.Name
 
 	// Decode the AES key, IV, MAC, MAC key and FileHash
-	iw.macKey, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.MacKey)
+	p.macKey, err = decodeBase64Key(p.applicationInfo.EncryptionInfo.MacKey)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
-	iw.mac, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.Mac)
+	p.mac, err = decodeBase64Key(p.applicationInfo.EncryptionInfo.Mac)
 	if err != nil {
-		iw.reader.Close()
-		return nil, err
-	}
-
-	iw.aesKey, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.Key)
-	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 
-	iw.aesIV, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.InitializationVector)
+	p.aesKey, err = decodeBase64Key(p.applicationInfo.EncryptionInfo.Key)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 
-	iw.contentHash, err = decodeBase64Key(iw.applicationInfo.EncryptionInfo.FileDigest)
+	p.aesIV, err = decodeBase64Key(p.applicationInfo.EncryptionInfo.InitializationVector)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 
-	// Set the variable contentFile
-	iw.contentFile = filepath.Join("IntuneWinPackage/Contents/", iw.applicationInfo.FileName)
+	p.contentHash, err = decodeBase64Key(p.applicationInfo.EncryptionInfo.FileDigest)
+	if err != nil {
+		p.reader.Close()
+		return nil, err
+	}
 
 	// Validate the HMAC value
 	// 1. Open the content file
 	// 2. Read the MAC in the first 32 bytes and compare it to the value in Detection.xml
 	// 3. Open the content file and verify the MAC
-	content, err := r.Open(iw.contentFile)
+	content, err := r.Open(contentFile)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 	defer content.Close()
@@ -117,53 +113,53 @@ func OpenFile(file string) (*Package, error) {
 	fileMAC := make([]byte, 32)
 	_, err = io.ReadFull(content, fileMAC)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 
-	if !hmac.Equal(iw.mac, fileMAC) {
-		iw.reader.Close()
+	if !hmac.Equal(p.mac, fileMAC) {
+		p.reader.Close()
 		return nil, errors.New("hmac missmatch: value in content.xml doesn't match the value in the file")
 	}
 
-	iw.validContentFile, err = ValidateHMAC(content, sha256.New, iw.macKey, iw.mac)
+	p.validContentFile, err = ValidateHMAC(content, sha256.New, p.macKey, p.mac)
 	if err != nil {
-		iw.reader.Close()
+		p.reader.Close()
 		return nil, err
 	}
 
-	if !iw.validContentFile {
-		iw.reader.Close()
+	if !p.validContentFile {
+		p.reader.Close()
 		return nil, errors.New("hmac verification failed")
 	}
 
-	return iw, nil
+	return p, nil
 }
 
 // Close closes the underlying zip reader if open.
-func (iw *Package) Close() error {
-	if iw.reader != nil {
-		return iw.reader.Close()
+func (p *Package) Close() error {
+	if p.reader != nil {
+		return p.reader.Close()
 	}
 	return nil
 }
 
 // ExtractContent writes the decrypted content package to destDir.
-func (iw *Package) ExtractContent(destDir string) error {
-	dest := filepath.Join(destDir, iw.applicationInfo.FileName)
+func (p *Package) ExtractContent(destDir string) error {
+	dest := filepath.Join(destDir, p.applicationInfo.FileName)
 	output, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
 	defer output.Close()
 
-	content, err := iw.reader.Open(iw.contentFile)
+	content, err := p.reader.Open(contentFile)
 	if err != nil {
 		return err
 	}
 	defer content.Close()
 
-	err = iw.decryptContentArchive(content, output)
+	err = p.decryptContentArchive(content, output)
 	if err != nil {
 		return err
 	}
@@ -171,9 +167,9 @@ func (iw *Package) ExtractContent(destDir string) error {
 	return nil
 }
 
-func (iw *Package) decryptContentArchive(input io.Reader, output *os.File) error {
+func (p *Package) decryptContentArchive(input io.Reader, output *os.File) error {
 	// Create a CBC decrypter
-	dec, err := NewAESCBCDecrypter(output, iw.aesIV, iw.aesKey)
+	dec, err := NewAESCBCDecrypter(output, p.aesIV, p.aesKey)
 	if err != nil {
 		return err
 	}
@@ -221,7 +217,7 @@ func (iw *Package) decryptContentArchive(input io.Reader, output *os.File) error
 	if err != nil {
 		return err
 	}
-	if hash != iw.applicationInfo.EncryptionInfo.FileDigest {
+	if hash != p.applicationInfo.EncryptionInfo.FileDigest {
 		return errors.New("unexpected content file hash")
 	}
 

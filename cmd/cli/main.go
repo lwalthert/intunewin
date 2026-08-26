@@ -66,7 +66,7 @@ func main() {
 			extract.Usage()
 			os.Exit(1)
 		}
-		iw, err := pkg.OpenFile(*extractFile)
+		iw, err := pkg.OpenPackage(*extractFile)
 		if err != nil {
 			log.Fatal(err)
 		}

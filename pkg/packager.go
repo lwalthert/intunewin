@@ -100,7 +100,7 @@ func (p *Packager) initMetadata(setupPath string) {
 	p.outputPath = filepath.Join(p.OutputDir, p.Name+".intunewin")
 	p.applicationInfo = *data.NewApplicationInfo(p.Name, p.SetupFile, tv)
 	p.applicationInfo.SetupFile = filepath.Base(setupPath)
-	p.applicationInfo.FileName = outputFileName
+	p.applicationInfo.FileName = contentFileName
 }
 
 func (p *Packager) populateMSIInfo(setupPath string) error {
@@ -304,7 +304,7 @@ func (p *Packager) writeZipPackage(w io.Writer, encryptedContent io.Reader) erro
 	zipWriter := zip.NewWriter(w)
 	defer zipWriter.Close()
 
-	entryPath := path.Join(contentsDir, outputFileName)
+	entryPath := path.Join(contentsDir, contentFileName)
 	fileWriter, err := zipWriter.CreateHeader(&zip.FileHeader{
 		Name:   entryPath,
 		Method: zip.Store,
