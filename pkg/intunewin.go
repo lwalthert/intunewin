@@ -115,6 +115,12 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 	}
 
 	defer output.Close()
+	var success bool
+	defer func() {
+		if !success {
+			os.Remove(iw.Path)
+		}
+	}()
 
 	// Generate the encryption keys and add them to the metadata
 	iv, err := generateKey(16)
@@ -149,6 +155,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		return nil, err
 	}
 
+	defer contentArchive.Close()
 	defer os.Remove(contentArchive.Name())
 
 	err = createContentArchive(contentPath, contentArchive)
@@ -183,6 +190,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		return nil, err
 	}
 
+	defer encryptedContent.Close()
 	defer os.Remove(encryptedContent.Name())
 
 	iw.applicationInfo.EncryptionInfo.Mac = base64.StdEncoding.EncodeToString(mac)
@@ -207,7 +215,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 		return nil, err
 	}
 
-	_, err = copyInChunks(encryptedContent, fileWriter)
+	_, err = io.Copy(fileWriter, encryptedContent)
 	if err != nil {
 		return nil, err
 	}
@@ -220,6 +228,7 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 
 	iw.writeMetadata(fileWriter)
 
+	success = true
 	return iw, nil
 }
 
@@ -324,7 +333,7 @@ func (iw *Intunewin) Close() error {
 
 // ExtractContent() writes the IntunePackage.intunewin to the path supplied in path
 func (iw *Intunewin) ExtractContent() error {
-	output, err := os.OpenFile(iw.applicationInfo.FileName, os.O_RDWR|os.O_CREATE, 0644)
+	output, err := os.OpenFile(iw.applicationInfo.FileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
@@ -359,7 +368,7 @@ func (iw *Intunewin) decryptContentArchive(input io.Reader, output *os.File) err
 		return err
 	}
 
-	n, err := copyInChunks(input, dec)
+	n, err := io.Copy(dec, input)
 	if err != nil {
 		return err
 	}
@@ -503,7 +512,7 @@ func createContentArchive(setupDirectory string, w io.Writer) error {
 		}
 
 		// Write the file to the ZIP archive
-		_, err = copyInChunks(file, fw)
+		_, err = io.Copy(fw, file)
 		if err != nil {
 			return err
 		}

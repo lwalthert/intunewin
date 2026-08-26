@@ -6,7 +6,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"hash"
 	"io"
 	"os"
@@ -104,7 +103,7 @@ func (bw AESCBCDecrypter) Write(b []byte) (int, error) {
 func ValidateHMAC(r io.Reader, h func() hash.Hash, key, suppliedMAC []byte) (bool, error) {
 	mac := hmac.New(h, key)
 
-	_, err := copyInChunks(r, mac)
+	_, err := io.Copy(mac, r)
 	if err != nil {
 		return false, err
 	}
@@ -115,32 +114,15 @@ func ValidateHMAC(r io.Reader, h func() hash.Hash, key, suppliedMAC []byte) (boo
 }
 
 func sha256FileHash(input *os.File) (string, error) {
-	// Go to the beginning of the file
-	_, err := input.Seek(0, 0)
+	_, err := input.Seek(0, io.SeekStart)
 	if err != nil {
 		return "", err
 	}
 
 	hash := sha256.New()
-
-	buf := make([]byte, 0, 2097152)
-	for {
-		n, err := io.ReadFull(input, buf[:cap(buf)])
-		buf = buf[:n]
-		if err != nil {
-			if err == io.EOF {
-				break // Reached end of file
-			}
-			if err != io.ErrUnexpectedEOF {
-				fmt.Fprintln(os.Stderr, err)
-				break
-			}
-		}
-
-		_, err = hash.Write(buf)
-		if err != nil {
-			return "", err
-		}
+	_, err = io.Copy(hash, input)
+	if err != nil {
+		return "", err
 	}
 
 	return base64.StdEncoding.EncodeToString(hash.Sum(nil)), nil
