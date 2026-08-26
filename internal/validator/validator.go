@@ -1,9 +1,8 @@
 package validator
 
 import (
-	"errors"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,7 +38,7 @@ func (v *Validator) Check(ok bool, key, message string) {
 	}
 }
 
-func PathIsExists(path string, expected PathType) bool {
+func PathExists(path string, expected PathType) bool {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return false
@@ -51,13 +50,13 @@ func PathIsExists(path string, expected PathType) bool {
 	case File:
 		return !stat.IsDir()
 	default:
-		panic(errors.New("got invalid PathType as Input"))
+		return false
 	}
 }
 
 func FileIsInDirectory(file, directory string) bool {
-	path := path.Join(directory, file)
-	return PathIsExists(path, File)
+	path := filepath.Join(directory, file)
+	return PathExists(path, File)
 }
 
 // IsRelativePath reports whether the given path is a plain file name or a

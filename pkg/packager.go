@@ -76,16 +76,16 @@ func (p *Packager) validate() error {
 		return errors.New("setup file cannot be blank")
 	}
 	if !validator.IsRelativePath(p.SetupFile) {
-		return fmt.Errorf("setup file %s must be a file name or relative path, not an absolute path", p.SetupFile)
+		return fmt.Errorf("%w: setup file %s must be a file name or relative path, not an absolute path", ErrInvalidSetupFile, p.SetupFile)
 	}
-	if !validator.PathIsExists(p.ContentDir, validator.Directory) {
-		return fmt.Errorf("content folder %s does not exist or is not a directory", p.ContentDir)
+	if !validator.PathExists(p.ContentDir, validator.Directory) {
+		return fmt.Errorf("%w: content folder %s does not exist or is not a directory", ErrInvalidContentFolder, p.ContentDir)
 	}
-	if !validator.PathIsExists(p.OutputDir, validator.Directory) {
+	if !validator.PathExists(p.OutputDir, validator.Directory) {
 		return fmt.Errorf("output folder %s does not exist or is not a directory", p.OutputDir)
 	}
 	if !validator.FileIsInDirectory(p.SetupFile, p.ContentDir) {
-		return fmt.Errorf("setup file %s is not in content folder %s", p.SetupFile, p.ContentDir)
+		return fmt.Errorf("%w: setup file %s is not in content folder %s", ErrInvalidSetupFile, p.SetupFile, p.ContentDir)
 	}
 	return nil
 }
@@ -198,7 +198,7 @@ func (p *Packager) prepareContentArchive() (*os.File, error) {
 		return nil, err
 	}
 
-	p.applicationInfo.UnencryptedContentSize = int(caStat.Size())
+	p.applicationInfo.UnencryptedContentSize = caStat.Size()
 	archiveHash, err := sha256FileHash(contentArchive)
 	if err != nil {
 		contentArchive.Close()
@@ -320,6 +320,9 @@ func (p *Packager) writeZipPackage(w io.Writer, encryptedContent io.Reader) erro
 func createContentArchive(setupDirectory string, w io.Writer) error {
 	var files []string
 	err := filepath.WalkDir(setupDirectory, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if !d.IsDir() {
 			files = append(files, path)
 		}

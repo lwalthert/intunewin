@@ -3,6 +3,6 @@ package pkg
 import "errors"
 
 var (
-	ErrorInvalidContentFolder = errors.New("invalid content folder")
-	ErrorInvalidSetupFile     = errors.New("invalid setup file")
+	ErrInvalidContentFolder = errors.New("invalid content folder")
+	ErrInvalidSetupFile     = errors.New("invalid setup file")
 )

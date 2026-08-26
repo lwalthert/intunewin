@@ -10,7 +10,7 @@ type ApplicationInfo struct {
 	Name                   string         `xml:"Name"`
 	FileName               string         `xml:"FileName"`
 	SetupFile              string         `xml:"SetupFile"`
-	UnencryptedContentSize int            `xml:"UnencryptedContentSize"`
+	UnencryptedContentSize int64          `xml:"UnencryptedContentSize"`
 	EncryptionInfo         EncryptionInfo `xml:"EncryptionInfo"`
 	MSIInfo                MSI            `xml:"MsiInfo"`
 }

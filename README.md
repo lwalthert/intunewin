@@ -1,8 +1,8 @@
 # Intunewin
 
-This projects tries to implement the functionality of the [Microsoft Win32 Content Prep Tool](https://github.com/Microsoft/Microsoft-Win32-Content-Prep-Tool) in golang.
+This project tries to implement the functionality of the [Microsoft Win32 Content Prep Tool](https://github.com/Microsoft/Microsoft-Win32-Content-Prep-Tool) in golang.
 It was made out of frustration with Microsoft's unwillingness to fix bugs in the official tool and regularly breaking it for months after new releases. It is also mostly
-crossplatform. Reading the metadata of an .msi setup file (which is stored in the
+cross-platform. Reading the metadata of an .msi setup file (which is stored in the
 MsiInfo section of Detection.xml) is supported on Windows (via the Windows Installer
 automation API) and, on Linux and macOS, by linking directly against the
 [msitools](https://gitlab.gnome.org/GNOME/msitools) libmsi C library via cgo (the
@@ -56,9 +56,27 @@ Windows Installer automation API.
 
 ## Usage
 
+### Create an `.intunewin` package
+
+```sh
+intunewin -c <setup_folder> -s <setup_file> -o <output_folder>
+```
+
+- `-c`: Setup folder containing all source files to package into the `.intunewin` file.
+- `-s`: Setup file (e.g. `setup.exe` or `setup.msi`), relative to the setup folder.
+- `-o`: Output folder where the generated `.intunewin` file will be placed.
+
+### Extract an `.intunewin` package
+
+```sh
+intunewin -e <package_file.intunewin>
+```
+
+- `-e`: Path to the `.intunewin` file to extract.
+
 ## Intunewin Package Structure
 
-The .intunewin file is a zip file that contains has the following structure:
+The .intunewin file is a zip file that has the following structure:
 
 ```bash
 |-- IntuneWinPackage
@@ -75,6 +93,6 @@ about msi setups and the encryption information for the "IntunePackage.intunewin
 
 ### IntunePackage.intunewin
 
-The file "IntunePackage.intunewin" is an encrypted zip archive that contains the installer. It is encrypte using AES256 in CBC mode with a random IV.
+The file "IntunePackage.intunewin" is an encrypted zip archive that contains the installer. It is encrypted using AES256 in CBC mode with a random IV.
 It is also hashed using HMAC-SHA256. The AES encryption key, IV, HMAC hash, and HMAC key for the encrypted file are found in the "Detection.xml" file. The "Detection.xml"
 file also contains the hash and hashing algorithm and file length of the unencrypted file.

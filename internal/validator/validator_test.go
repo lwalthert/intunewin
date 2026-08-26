@@ -32,27 +32,30 @@ func TestValidator_CheckAndValid(t *testing.T) {
 	}
 }
 
-func TestPathIsExists(t *testing.T) {
+func TestPathExists(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(file, []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	if !PathIsExists(dir, Directory) {
-		t.Errorf("PathIsExists(%q, Directory) = false, want true", dir)
+	if !PathExists(dir, Directory) {
+		t.Errorf("PathExists(%q, Directory) = false, want true", dir)
 	}
-	if PathIsExists(dir, File) {
-		t.Errorf("PathIsExists(%q, File) = true, want false", dir)
+	if PathExists(dir, File) {
+		t.Errorf("PathExists(%q, File) = true, want false", dir)
 	}
-	if !PathIsExists(file, File) {
-		t.Errorf("PathIsExists(%q, File) = false, want true", file)
+	if !PathExists(file, File) {
+		t.Errorf("PathExists(%q, File) = false, want true", file)
 	}
-	if PathIsExists(file, Directory) {
-		t.Errorf("PathIsExists(%q, Directory) = true, want false", file)
+	if PathExists(file, Directory) {
+		t.Errorf("PathExists(%q, Directory) = true, want false", file)
 	}
-	if PathIsExists(filepath.Join(dir, "missing"), File) {
-		t.Errorf("PathIsExists for missing path = true, want false")
+	if PathExists(filepath.Join(dir, "missing"), File) {
+		t.Errorf("PathExists for missing path = true, want false")
+	}
+	if PathExists(dir, PathType(999)) {
+		t.Errorf("PathExists with invalid PathType = true, want false")
 	}
 }
 

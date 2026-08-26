@@ -104,7 +104,7 @@ func ReadMSI(msi *MSI, props *MSIProperties) {
 // install for. There is no direct MSI property for this, so it is inferred
 // from ALLUSERS, mirroring the Intune detection heuristic.
 func executionContext(props map[string]string) string {
-	allUsers, _ := props["ALLUSERS"]
+	allUsers := props["ALLUSERS"]
 	installPerUser := props["MSIINSTALLPERUSER"]
 
 	switch strings.ToUpper(allUsers) {

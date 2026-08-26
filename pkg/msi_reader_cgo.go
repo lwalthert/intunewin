@@ -104,6 +104,7 @@ func (m *msiReader) summaryInfo(db *C.LibmsiDatabase) (string, error) {
 	if str == nil {
 		return "", cgoError("read summary information", cerr)
 	}
+	defer C.g_free(C.gpointer(str))
 	return C.GoString(str), nil
 }
 
