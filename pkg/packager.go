@@ -38,7 +38,7 @@ type Packager struct {
 // contentPath: The path to the content folder
 // setupFile: The name of the setup file, relative to the content folder
 // outputPath: The path to the output folder
-// Returns a pointer to the new intunewin file
+// Returns a pointer to the new Packager
 func NewPackager(name, contentDir, setupFile, outputDir string) *Packager {
 	return &Packager{
 		Name:        name,
