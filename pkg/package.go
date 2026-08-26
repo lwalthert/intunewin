@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/lwalthert/intunewin/internal/data"
@@ -100,7 +101,7 @@ func OpenFile(file string) (*Package, error) {
 	}
 
 	// Set the variable contentFile
-	iw.contentFile = filepath.Join("IntuneWinPackage/Contents/", iw.applicationInfo.FileName)
+	iw.contentFile = path.Join(contentsDir, iw.applicationInfo.FileName)
 
 	// Validate the HMAC value
 	// 1. Open the content file
