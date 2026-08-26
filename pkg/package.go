@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"archive/zip"
-	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/xml"
@@ -119,7 +118,7 @@ func OpenPackage(path string) (*Package, error) {
 
 	if !hmac.Equal(p.mac, fileMAC) {
 		p.reader.Close()
-		return nil, errors.New("hmac missmatch: value in content.xml doesn't match the value in the file")
+		return nil, errors.New("hmac mismatch: value in Detection.xml doesn't match the value in the file")
 	}
 
 	p.validContentFile, err = ValidateHMAC(content, sha256.New, p.macKey, p.mac)
@@ -181,35 +180,12 @@ func (p *Package) decryptContentArchive(input io.Reader, output *os.File) error 
 		return err
 	}
 
-	n, err := io.Copy(dec, input)
-	if err != nil {
+	if _, err := io.Copy(dec, input); err != nil {
 		return err
 	}
 
-	if n%int64(dec.Block.BlockSize()) != 0 {
-		return errors.New("data is not block-aligned")
-	}
-
-	// Strip the PKCS#7 padding
-	// https://datatracker.ietf.org/doc/html/rfc5246#section-6.2.3.2 remove PKCS#7 padding
-	buf := make([]byte, 1)
-	_, err = output.ReadAt(buf, n-1)
-	if err != nil {
+	if err := dec.Close(); err != nil {
 		return err
-	}
-	padLen := int64(buf[0])
-
-	if padLen > 0 && padLen < int64(dec.Block.BlockSize()) {
-		refPad := bytes.Repeat([]byte{byte(padLen)}, int(padLen))
-		padding := make([]byte, padLen)
-		_, err = output.ReadAt(padding, n-1-padLen)
-		if err != nil {
-			return err
-		}
-
-		if bytes.Equal(refPad, padding) {
-			output.Truncate(n - padLen)
-		}
 	}
 
 	// Verify SHA256 hash

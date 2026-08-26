@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"archive/zip"
-	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/xml"
@@ -251,47 +250,34 @@ func (p *Packager) encryptContentArchive(input io.Reader) (*os.File, []byte, err
 
 	// The first 32 bytes of the file contain the HMAC of the encrypted file.
 	// The value is only known after encrypting the file so it has to be written at the end.
-	if _, err := output.Seek(32, 0); err != nil {
+	if _, err := output.Seek(32, io.SeekStart); err != nil {
+		output.Close()
 		os.Remove(output.Name())
 		return nil, nil, err
 	}
 
 	aesWriter, err := NewAESCBCEncrypter(output, sha256.New, p.aesIV, p.aesKey, p.macKey)
 	if err != nil {
+		output.Close()
 		os.Remove(output.Name())
 		return nil, nil, err
 	}
 
-	blockSize := int(aesWriter.Block.BlockSize())
-	buf := make([]byte, 0, 2097152)
-	for {
-		n, err := io.ReadFull(input, buf[:cap(buf)])
-		if n%blockSize != 0 {
-			padding := blockSize - n%blockSize
-			buf = append(buf[:n], bytes.Repeat([]byte{byte(padding)}, padding)...)
-			n = n + padding
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if !errors.Is(err, io.ErrUnexpectedEOF) {
-				os.Remove(output.Name())
-				fmt.Fprintln(os.Stderr, err)
-				return nil, nil, err
-			}
-		}
+	if _, err := io.Copy(aesWriter, input); err != nil {
+		output.Close()
+		os.Remove(output.Name())
+		return nil, nil, err
+	}
 
-		n, err = aesWriter.Write(buf[:n])
-		if err != nil {
-			os.Remove(output.Name())
-			return nil, nil, err
-		}
+	if err := aesWriter.Close(); err != nil {
+		output.Close()
+		os.Remove(output.Name())
+		return nil, nil, err
 	}
 
 	hmac := aesWriter.Sum(nil)
-	_, err = output.WriteAt(hmac, 0)
-	if err != nil {
+	if _, err := output.WriteAt(hmac, 0); err != nil {
+		output.Close()
 		os.Remove(output.Name())
 		return nil, nil, err
 	}

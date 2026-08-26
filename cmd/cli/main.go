@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -53,7 +52,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		name := strings.TrimSuffix(path.Base(*setupFile), path.Ext(*setupFile))
+		name := strings.TrimSuffix(filepath.Base(*setupFile), filepath.Ext(*setupFile))
 
 		p := pkg.NewPackager(name, contentDir, *setupFile, outputDir)
 		_, err = p.Package()

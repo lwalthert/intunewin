@@ -10,55 +10,65 @@ import (
 )
 
 // TestRoundTrip packages a content folder, reopens the resulting .intunewin
-// file with OpenFile and extracts it with ExtractContent, then checks that
+// file with OpenPackage and extracts it with ExtractContent, then checks that
 // the original files come back byte for byte.
 func TestRoundTrip(t *testing.T) {
-	// Use a payload that is not a multiple of the AES block size so PKCS#7
-	// padding has to be added during encryption and stripped during decryption.
-	setupContents := bytes.Repeat([]byte("hello intunewin, "), 1000)
-
-	contentDir := writeContentDir(t, "setup.exe", setupContents)
-	outputDir := t.TempDir()
-
-	p, err := NewPackager("TestApp", contentDir, "setup.exe", outputDir).Package()
-	if err != nil {
-		t.Fatalf("PackageIntunewin() error = %v", err)
+	testPayloads := []struct {
+		name    string
+		payload []byte
+	}{
+		{"non-block-aligned", bytes.Repeat([]byte("hello intunewin, "), 1000)},
+		{"small odd size", []byte("odd size data!")},
+		{"exact 16 bytes", bytes.Repeat([]byte("A"), 16)},
+		{"exact 32 bytes", bytes.Repeat([]byte("B"), 32)},
 	}
 
-	opened, err := OpenPackage(p.Path)
-	if err != nil {
-		t.Fatalf("OpenPackage() error = %v", err)
-	}
-	defer opened.Close()
+	for _, tc := range testPayloads {
+		t.Run(tc.name, func(t *testing.T) {
+			contentDir := writeContentDir(t, "setup.exe", tc.payload)
+			outputDir := t.TempDir()
 
-	if opened.Name != "TestApp" {
-		t.Errorf("opened.Name = %q, want %q", opened.Name, "TestApp")
-	}
+			p, err := NewPackager("TestApp", contentDir, "setup.exe", outputDir).Package()
+			if err != nil {
+				t.Fatalf("Package() error = %v", err)
+			}
 
-	extractDir := t.TempDir()
-	if err := opened.ExtractContent(extractDir); err != nil {
-		t.Fatalf("ExtractContent() error = %v", err)
-	}
+			opened, err := OpenPackage(p.Path)
+			if err != nil {
+				t.Fatalf("OpenPackage() error = %v", err)
+			}
+			defer opened.Close()
 
-	extractedZip, err := zip.OpenReader(filepath.Join(extractDir, opened.applicationInfo.FileName))
-	if err != nil {
-		t.Fatalf("failed to open extracted content archive: %v", err)
-	}
-	defer extractedZip.Close()
+			if opened.Name != "TestApp" {
+				t.Errorf("opened.Name = %q, want %q", opened.Name, "TestApp")
+			}
 
-	f, err := extractedZip.Open("setup.exe")
-	if err != nil {
-		t.Fatalf("extracted archive is missing setup.exe: %v", err)
-	}
-	defer f.Close()
+			extractDir := t.TempDir()
+			if err := opened.ExtractContent(extractDir); err != nil {
+				t.Fatalf("ExtractContent() error = %v", err)
+			}
 
-	got, err := io.ReadAll(f)
-	if err != nil {
-		t.Fatalf("failed to read setup.exe from extracted archive: %v", err)
-	}
+			extractedZip, err := zip.OpenReader(filepath.Join(extractDir, opened.applicationInfo.FileName))
+			if err != nil {
+				t.Fatalf("failed to open extracted content archive: %v", err)
+			}
+			defer extractedZip.Close()
 
-	if !bytes.Equal(got, setupContents) {
-		t.Fatalf("extracted setup.exe contents = %d bytes, want %d bytes matching original", len(got), len(setupContents))
+			f, err := extractedZip.Open("setup.exe")
+			if err != nil {
+				t.Fatalf("extracted archive is missing setup.exe: %v", err)
+			}
+			defer f.Close()
+
+			got, err := io.ReadAll(f)
+			if err != nil {
+				t.Fatalf("failed to read setup.exe from extracted archive: %v", err)
+			}
+
+			if !bytes.Equal(got, tc.payload) {
+				t.Fatalf("extracted setup.exe contents = %d bytes, want %d bytes matching original", len(got), len(tc.payload))
+			}
+		})
 	}
 }
 

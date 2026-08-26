@@ -10,70 +10,135 @@ import (
 )
 
 func TestCrypto_EncryptDecrypt(t *testing.T) {
-	iv, err := generateKey(16)
-	if err != nil {
-		t.Fatalf("generateKey(16) error = %v", err)
+	testSizes := []int{0, 1, 15, 16, 17, 31, 32, 33, 100, 1024, 65536}
+
+	for _, size := range testSizes {
+		t.Run(string(rune(size)), func(t *testing.T) {
+			iv, err := generateKey(16)
+			if err != nil {
+				t.Fatalf("generateKey(16) error = %v", err)
+			}
+			aesKey, err := generateKey(32)
+			if err != nil {
+				t.Fatalf("generateKey(32) error = %v", err)
+			}
+			macKey, err := generateKey(32)
+			if err != nil {
+				t.Fatalf("generateKey(32) error = %v", err)
+			}
+
+			plaintext := bytes.Repeat([]byte("A"), size)
+
+			var encryptedBuf bytes.Buffer
+			enc, err := NewAESCBCEncrypter(&encryptedBuf, sha256.New, iv, aesKey, macKey)
+			if err != nil {
+				t.Fatalf("NewAESCBCEncrypter error = %v", err)
+			}
+
+			// Write in small chunks to test streaming buffering
+			chunkSize := 7
+			for i := 0; i < len(plaintext); i += chunkSize {
+				end := i + chunkSize
+				if end > len(plaintext) {
+					end = len(plaintext)
+				}
+				n, err := enc.Write(plaintext[i:end])
+				if err != nil {
+					t.Fatalf("enc.Write() error = %v", err)
+				}
+				if n != end-i {
+					t.Fatalf("enc.Write() wrote %d bytes, want %d", n, end-i)
+				}
+			}
+
+			if err := enc.Close(); err != nil {
+				t.Fatalf("enc.Close() error = %v", err)
+			}
+
+			mac := enc.Sum(nil)
+			if len(mac) != 32 {
+				t.Fatalf("enc.Sum() returned %d bytes, want 32", len(mac))
+			}
+
+			// Encrypted buffer has IV (16 bytes) + padded ciphertext
+			ciphertextWithIV := encryptedBuf.Bytes()
+			expectedPad := 16 - (size % 16)
+			expectedCipherLen := size + expectedPad
+			if len(ciphertextWithIV) != 16+expectedCipherLen {
+				t.Fatalf("encrypted buffer length = %d, want %d", len(ciphertextWithIV), 16+expectedCipherLen)
+			}
+
+			// Decrypt
+			var decryptedBuf bytes.Buffer
+			dec, err := NewAESCBCDecrypter(&decryptedBuf, iv, aesKey)
+			if err != nil {
+				t.Fatalf("NewAESCBCDecrypter error = %v", err)
+			}
+
+			// Pass only ciphertext (skip IV)
+			ciphertextOnly := ciphertextWithIV[16:]
+			// Feed in irregular chunk sizes
+			for i := 0; i < len(ciphertextOnly); i += 11 {
+				end := i + 11
+				if end > len(ciphertextOnly) {
+					end = len(ciphertextOnly)
+				}
+				n, err := dec.Write(ciphertextOnly[i:end])
+				if err != nil {
+					t.Fatalf("dec.Write() error = %v", err)
+				}
+				if n != end-i {
+					t.Fatalf("dec.Write() wrote %d bytes, want %d", n, end-i)
+				}
+			}
+
+			if err := dec.Close(); err != nil {
+				t.Fatalf("dec.Close() error = %v", err)
+			}
+
+			if !bytes.Equal(decryptedBuf.Bytes(), plaintext) {
+				t.Fatalf("decrypted text mismatch for size %d", size)
+			}
+		})
 	}
-	aesKey, err := generateKey(32)
-	if err != nil {
-		t.Fatalf("generateKey(32) error = %v", err)
-	}
-	macKey, err := generateKey(32)
-	if err != nil {
-		t.Fatalf("generateKey(32) error = %v", err)
+}
+
+func TestPKCS7Padding(t *testing.T) {
+	blockSize := 16
+
+	// Test padding lengths
+	for l := 0; l <= 32; l++ {
+		data := make([]byte, l)
+		padded := pkcs7Pad(data, blockSize)
+		if len(padded)%blockSize != 0 {
+			t.Fatalf("padded length %d is not a multiple of %d", len(padded), blockSize)
+		}
+		expectedPadLen := blockSize - (l % blockSize)
+		if len(padded) != l+expectedPadLen {
+			t.Fatalf("padded length = %d, want %d", len(padded), l+expectedPadLen)
+		}
+
+		unpadded, err := pkcs7Unpad(padded, blockSize)
+		if err != nil {
+			t.Fatalf("pkcs7Unpad error = %v", err)
+		}
+		if !bytes.Equal(unpadded, data) {
+			t.Fatalf("unpadded data mismatch")
+		}
 	}
 
-	var encryptedBuf bytes.Buffer
-	enc, err := NewAESCBCEncrypter(&encryptedBuf, sha256.New, iv, aesKey, macKey)
-	if err != nil {
-		t.Fatalf("NewAESCBCEncrypter error = %v", err)
+	// Invalid padding test cases
+	invalidCases := [][]byte{
+		{},        // empty
+		{1, 2, 3}, // not block-aligned
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},    // padLen 0
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 17},   // padLen > blockSize
+		{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 2}, // mismatched padding bytes
 	}
-
-	plaintext := []byte("this is a block of test data 1234") // 33 bytes, needs padding to 48
-	blockSize := enc.Block.BlockSize()
-	padding := blockSize - (len(plaintext) % blockSize)
-	padded := append(plaintext, bytes.Repeat([]byte{byte(padding)}, padding)...)
-
-	n, err := enc.Write(padded)
-	if err != nil {
-		t.Fatalf("enc.Write() error = %v", err)
-	}
-	if n != len(padded) {
-		t.Fatalf("enc.Write() wrote %d bytes, want %d", n, len(padded))
-	}
-
-	mac := enc.Sum(nil)
-	if len(mac) != 32 {
-		t.Fatalf("enc.Sum() returned %d bytes, want 32", len(mac))
-	}
-
-	// Encrypted buffer has IV (16 bytes) + ciphertext (48 bytes)
-	ciphertextWithIV := encryptedBuf.Bytes()
-	if len(ciphertextWithIV) != 16+len(padded) {
-		t.Fatalf("encrypted buffer length = %d, want %d", len(ciphertextWithIV), 16+len(padded))
-	}
-
-	// Decrypt
-	var decryptedBuf bytes.Buffer
-	dec, err := NewAESCBCDecrypter(&decryptedBuf, iv, aesKey)
-	if err != nil {
-		t.Fatalf("NewAESCBCDecrypter error = %v", err)
-	}
-
-	// Pass only ciphertext (skip IV)
-	ciphertextOnly := ciphertextWithIV[16:]
-	n, err = dec.Write(ciphertextOnly)
-	if err != nil {
-		t.Fatalf("dec.Write() error = %v", err)
-	}
-	if n != len(ciphertextOnly) {
-		t.Fatalf("dec.Write() wrote %d bytes, want %d", n, len(ciphertextOnly))
-	}
-
-	decryptedPadded := decryptedBuf.Bytes()
-	unpadded := decryptedPadded[:len(decryptedPadded)-padding]
-	if !bytes.Equal(unpadded, plaintext) {
-		t.Fatalf("decrypted text = %q, want %q", unpadded, plaintext)
+	for i, c := range invalidCases {
+		if _, err := pkcs7Unpad(c, blockSize); err == nil {
+			t.Errorf("pkcs7Unpad case %d: expected error, got nil", i)
+		}
 	}
 }
 

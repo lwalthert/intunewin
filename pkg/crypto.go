@@ -1,22 +1,51 @@
 package pkg
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"hash"
 	"io"
 	"os"
 )
 
+var ErrInvalidPadding = errors.New("invalid PKCS#7 padding")
+
+func pkcs7Pad(data []byte, blockSize int) []byte {
+	padding := blockSize - (len(data) % blockSize)
+	padText := bytes.Repeat([]byte{byte(padding)}, padding)
+	return append(data, padText...)
+}
+
+func pkcs7Unpad(data []byte, blockSize int) ([]byte, error) {
+	length := len(data)
+	if length == 0 || length%blockSize != 0 {
+		return nil, ErrInvalidPadding
+	}
+	padLen := int(data[length-1])
+	if padLen == 0 || padLen > blockSize || padLen > length {
+		return nil, ErrInvalidPadding
+	}
+	for i := length - padLen; i < length; i++ {
+		if data[i] != byte(padLen) {
+			return nil, ErrInvalidPadding
+		}
+	}
+	return data[:length-padLen], nil
+}
+
 type AESCBCEncrypter struct {
-	Block     cipher.Block
-	BlockMode cipher.BlockMode
+	block     cipher.Block
+	blockMode cipher.BlockMode
 	hash      hash.Hash
 	writer    io.Writer
+	buffer    []byte
+	closed    bool
 }
 
 func NewAESCBCEncrypter(w io.Writer, h func() hash.Hash, iv, aesKey, macKey []byte) (*AESCBCEncrypter, error) {
@@ -31,46 +60,72 @@ func NewAESCBCEncrypter(w io.Writer, h func() hash.Hash, iv, aesKey, macKey []by
 	blockMode := cipher.NewCBCEncrypter(block, iv)
 
 	// The IV is always written to the start of the file and has to be passed to the hash function as well.
-	_, err = w.Write(iv)
-	if err != nil {
+	if _, err := w.Write(iv); err != nil {
 		return nil, err
 	}
-	_, err = hash.Write(iv)
-	if err != nil {
+	if _, err := hash.Write(iv); err != nil {
 		return nil, err
 	}
 
 	return &AESCBCEncrypter{
-		Block:     block,
-		BlockMode: blockMode,
+		block:     block,
+		blockMode: blockMode,
 		hash:      hash,
 		writer:    w,
 	}, nil
 }
 
-func (bw AESCBCEncrypter) Write(b []byte) (int, error) {
-	bw.BlockMode.CryptBlocks(b, b)
-
-	n, err := bw.writer.Write(b)
-	if err != nil {
-		return n, err
+func (enc *AESCBCEncrypter) Write(p []byte) (int, error) {
+	if enc.closed {
+		return 0, errors.New("write to closed encrypter")
 	}
-	_, err = bw.hash.Write(b)
-	if err != nil {
-		return n, err
+	enc.buffer = append(enc.buffer, p...)
+	blockSize := enc.block.BlockSize()
+
+	nBlocks := len(enc.buffer) / blockSize
+	if nBlocks > 0 {
+		toEncrypt := enc.buffer[:nBlocks*blockSize]
+		enc.blockMode.CryptBlocks(toEncrypt, toEncrypt)
+		if _, err := enc.writer.Write(toEncrypt); err != nil {
+			return 0, err
+		}
+		if _, err := enc.hash.Write(toEncrypt); err != nil {
+			return 0, err
+		}
+		enc.buffer = enc.buffer[nBlocks*blockSize:]
 	}
 
-	return n, nil
+	return len(p), nil
 }
 
-func (bw AESCBCEncrypter) Sum(b []byte) []byte {
-	return bw.hash.Sum(b)
+func (enc *AESCBCEncrypter) Close() error {
+	if enc.closed {
+		return nil
+	}
+	enc.closed = true
+
+	padded := pkcs7Pad(enc.buffer, enc.block.BlockSize())
+	enc.blockMode.CryptBlocks(padded, padded)
+	if _, err := enc.writer.Write(padded); err != nil {
+		return err
+	}
+	if _, err := enc.hash.Write(padded); err != nil {
+		return err
+	}
+	enc.buffer = nil
+	return nil
+}
+
+func (enc *AESCBCEncrypter) Sum(b []byte) []byte {
+	return enc.hash.Sum(b)
 }
 
 type AESCBCDecrypter struct {
-	Block     cipher.Block
-	BlockMode cipher.BlockMode
+	block     cipher.Block
+	blockMode cipher.BlockMode
 	writer    io.Writer
+	buffer    []byte
+	closed    bool
 }
 
 func NewAESCBCDecrypter(w io.Writer, iv, aesKey []byte) (*AESCBCDecrypter, error) {
@@ -82,21 +137,56 @@ func NewAESCBCDecrypter(w io.Writer, iv, aesKey []byte) (*AESCBCDecrypter, error
 	blockMode := cipher.NewCBCDecrypter(block, iv)
 
 	return &AESCBCDecrypter{
-		Block:     block,
-		BlockMode: blockMode,
+		block:     block,
+		blockMode: blockMode,
 		writer:    w,
 	}, nil
 }
 
-func (bw AESCBCDecrypter) Write(b []byte) (int, error) {
-	bw.BlockMode.CryptBlocks(b, b)
+func (dec *AESCBCDecrypter) Write(p []byte) (int, error) {
+	if dec.closed {
+		return 0, errors.New("write to closed decrypter")
+	}
+	dec.buffer = append(dec.buffer, p...)
+	blockSize := dec.block.BlockSize()
 
-	n, err := bw.writer.Write(b)
-	if err != nil {
-		return n, err
+	// Keep at least one block in the buffer for unpadding during Close()
+	if len(dec.buffer) > blockSize {
+		nBlocks := (len(dec.buffer) - 1) / blockSize
+		toDecrypt := dec.buffer[:nBlocks*blockSize]
+		dec.blockMode.CryptBlocks(toDecrypt, toDecrypt)
+		if _, err := dec.writer.Write(toDecrypt); err != nil {
+			return 0, err
+		}
+		dec.buffer = dec.buffer[nBlocks*blockSize:]
 	}
 
-	return n, nil
+	return len(p), nil
+}
+
+func (dec *AESCBCDecrypter) Close() error {
+	if dec.closed {
+		return nil
+	}
+	dec.closed = true
+
+	if len(dec.buffer) == 0 {
+		return errors.New("unexpected end of data: missing final block")
+	}
+	if len(dec.buffer)%dec.block.BlockSize() != 0 {
+		return errors.New("data is not block-aligned")
+	}
+
+	dec.blockMode.CryptBlocks(dec.buffer, dec.buffer)
+	unpadded, err := pkcs7Unpad(dec.buffer, dec.block.BlockSize())
+	if err != nil {
+		return err
+	}
+	if _, err := dec.writer.Write(unpadded); err != nil {
+		return err
+	}
+	dec.buffer = nil
+	return nil
 }
 
 // ValidateMAC validates check if the HMAC generated with the data read through r matches the hash passed to the function.
