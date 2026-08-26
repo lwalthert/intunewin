@@ -179,34 +179,35 @@ func (p *Packager) build() (*Package, error) {
 	}, nil
 }
 
+type countingWriter struct {
+	w     io.Writer
+	count int64
+}
+
+func (cw *countingWriter) Write(p []byte) (int, error) {
+	n, err := cw.w.Write(p)
+	cw.count += int64(n)
+	return n, err
+}
+
 func (p *Packager) prepareContentArchive() (*os.File, error) {
 	contentArchive, err := os.CreateTemp("", "IntunePackage*.zip")
 	if err != nil {
 		return nil, err
 	}
 
-	if err := createContentArchive(p.ContentDir, contentArchive); err != nil {
+	hasher := sha256.New()
+	cw := &countingWriter{w: contentArchive}
+	mw := io.MultiWriter(cw, hasher)
+
+	if err := createContentArchive(p.ContentDir, mw); err != nil {
 		contentArchive.Close()
 		os.Remove(contentArchive.Name())
 		return nil, err
 	}
 
-	caStat, err := contentArchive.Stat()
-	if err != nil {
-		contentArchive.Close()
-		os.Remove(contentArchive.Name())
-		return nil, err
-	}
-
-	p.applicationInfo.UnencryptedContentSize = caStat.Size()
-	archiveHash, err := sha256FileHash(contentArchive)
-	if err != nil {
-		contentArchive.Close()
-		os.Remove(contentArchive.Name())
-		return nil, err
-	}
-
-	p.applicationInfo.EncryptionInfo.FileDigest = archiveHash
+	p.applicationInfo.UnencryptedContentSize = cw.count
+	p.applicationInfo.EncryptionInfo.FileDigest = base64.StdEncoding.EncodeToString(hasher.Sum(nil))
 	p.applicationInfo.EncryptionInfo.FileDigestAlgorithm = fileDigestAlgo
 
 	if _, err := contentArchive.Seek(0, io.SeekStart); err != nil {

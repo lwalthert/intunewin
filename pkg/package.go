@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -166,9 +167,12 @@ func (p *Package) ExtractContent(destDir string) error {
 	return nil
 }
 
-func (p *Package) decryptContentArchive(input io.Reader, output *os.File) error {
+func (p *Package) decryptContentArchive(input io.Reader, output io.Writer) error {
+	hasher := sha256.New()
+	mw := io.MultiWriter(output, hasher)
+
 	// Create a CBC decrypter
-	dec, err := NewAESCBCDecrypter(output, p.aesIV, p.aesKey)
+	dec, err := NewAESCBCDecrypter(mw, p.aesIV, p.aesKey)
 	if err != nil {
 		return err
 	}
@@ -188,11 +192,8 @@ func (p *Package) decryptContentArchive(input io.Reader, output *os.File) error 
 		return err
 	}
 
-	// Verify SHA256 hash
-	hash, err := sha256FileHash(output)
-	if err != nil {
-		return err
-	}
+	// Verify SHA256 hash computed in a single pass
+	hash := base64.StdEncoding.EncodeToString(hasher.Sum(nil))
 	if hash != p.applicationInfo.EncryptionInfo.FileDigest {
 		return errors.New("unexpected content file hash")
 	}
