@@ -46,7 +46,7 @@ jobs:
 
       - name: Install libmsi dev headers
         if: matrix.install_libmsi
-        run: sudo apt-get install -y libmsi-dev, libglib2.0-dev
+        run: sudo apt-get install -y libmsi-dev libglib2.0-dev
 
       - name: Build
         run: go build ./...

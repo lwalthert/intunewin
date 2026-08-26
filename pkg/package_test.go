@@ -81,7 +81,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 	var offset int64
 	found := false
 	for _, zf := range r.File {
-		if zf.Name == contentsDir+contentFileName {
+		if zf.Name == contentFile {
 			offset, err = zf.DataOffset()
 			if err != nil {
 				t.Fatalf("failed to get data offset: %v", err)
@@ -91,7 +91,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 	}
 	r.Close()
 	if !found {
-		t.Fatalf("content entry %s not found in packaged file", contentsDir+contentFileName)
+		t.Fatalf("content entry %s not found in packaged file", contentFile)
 	}
 
 	raw, err := os.OpenFile(p.Path, os.O_RDWR, 0644)
