@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -204,8 +205,8 @@ func NewIntunewin(name, contentPath, setupFile, outputPath string) (*Intunewin, 
 
 	defer zipWriter.Close()
 
-	// Write Content
-	path := filepath.Join(contentsDir, outputFileName)
+	// explicitly using path.Join for ZIP file entries
+	path := path.Join(contentsDir, outputFileName)
 	fileWriter, err := zipWriter.CreateHeader(&zip.FileHeader{
 		Name:   path,
 		Method: zip.Store,
@@ -331,8 +332,9 @@ func (iw *Intunewin) Close() error {
 }
 
 // ExtractContent() writes the IntunePackage.intunewin to the path supplied in path
-func (iw *Intunewin) ExtractContent() error {
-	output, err := os.OpenFile(iw.applicationInfo.FileName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+func (iw *Intunewin) ExtractContent(destDir string) error {
+	dest := filepath.Join(destDir, iw.applicationInfo.FileName)
+	output, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
