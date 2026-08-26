@@ -58,42 +58,28 @@ func TestPackager_Package(t *testing.T) {
 	contentDir := writeContentDir(t, "setup.exe", payload)
 	outputDir := t.TempDir()
 
-	p := NewPackager("DirectApp", contentDir, "setup.exe", outputDir)
-	iw, err := p.Package()
+	pr := NewPackager("DirectApp", contentDir, "setup.exe", outputDir)
+	p, err := pr.Package()
 	if err != nil {
-		t.Fatalf("p.Package() error = %v", err)
+		t.Fatalf("pr.Package() error = %v", err)
 	}
 
 	expectedPath := filepath.Join(outputDir, "DirectApp.intunewin")
-	if iw.Path != expectedPath {
-		t.Fatalf("iw.Path = %q, want %q", iw.Path, expectedPath)
+	if p.Path != expectedPath {
+		t.Fatalf("p.Path = %q, want %q", p.Path, expectedPath)
 	}
-	if iw.Name != "DirectApp" {
-		t.Fatalf("iw.Name = %q, want %q", iw.Name, "DirectApp")
+	if p.Name != "DirectApp" {
+		t.Fatalf("p.Name = %q, want %q", p.Name, "DirectApp")
 	}
 
 	// Calling Close() on an Intunewin object returned by Packager should be a safe no-op
-	if err := iw.Close(); err != nil {
-		t.Fatalf("iw.Close() error = %v", err)
+	if err := p.Close(); err != nil {
+		t.Fatalf("p.Close() error = %v", err)
 	}
 
 	// Verify file exists on disk
 	if _, err := os.Stat(expectedPath); err != nil {
 		t.Fatalf("stat failed for created archive: %v", err)
-	}
-}
-
-func TestPackager_PackageIntunewin(t *testing.T) {
-	contentDir := writeContentDir(t, "setup.exe", []byte("helper test"))
-	outputDir := t.TempDir()
-
-	iw, err := PackageIntunewin("HelperApp", contentDir, "setup.exe", outputDir)
-	if err != nil {
-		t.Fatalf("PackageIntunewin() error = %v", err)
-	}
-
-	if iw.Name != "HelperApp" {
-		t.Fatalf("iw.Name = %q, want %q", iw.Name, "HelperApp")
 	}
 }
 

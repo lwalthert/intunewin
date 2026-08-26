@@ -19,13 +19,13 @@ import (
 	"github.com/lwalthert/intunewin/internal/validator"
 )
 
-// Packager handles the creation and packaging of an .intunewin archive.
+// Packager handles the creation and packaging of an .intunewin package.
 type Packager struct {
-	Name        string
-	ContentDir  string
+	Name        string // The name of the intunewin file
+	ContentDir  string // The directory containing the content to package
 	SetupFile   string // relative to ContentDir
-	OutputDir   string
-	ToolVersion string
+	OutputDir   string // The directory to output the intunewin file
+	ToolVersion string // currently hardcoded to "1.0.0" Microsoft might change this in the future
 
 	applicationInfo data.ApplicationInfo
 	outputPath      string
@@ -35,6 +35,11 @@ type Packager struct {
 }
 
 // NewPackager creates a new Packager with the provided parameters.
+// name: The name of the intunewin file
+// contentPath: The path to the content folder
+// setupFile: The name of the setup file, relative to the content folder
+// outputPath: The path to the output folder
+// Returns a pointer to the new intunewin file
 func NewPackager(name, contentDir, setupFile, outputDir string) *Packager {
 	return &Packager{
 		Name:        name,
@@ -63,17 +68,6 @@ func (p *Packager) Package() (*Package, error) {
 	}
 
 	return p.build()
-}
-
-// PackageIntunewin creates a new intunewin file by delegating to Packager.
-// name: The name of the intunewin file
-// contentPath: The path to the content folder
-// setupFile: The name of the setup file, relative to the content folder
-// outputPath: The path to the output folder
-// Returns a pointer to the new intunewin file
-func PackageIntunewin(name, contentPath, setupFile, outputPath string) (*Package, error) {
-	p := NewPackager(name, contentPath, setupFile, outputPath)
-	return p.Package()
 }
 
 func (p *Packager) validate() error {

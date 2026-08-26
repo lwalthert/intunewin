@@ -20,12 +20,12 @@ func TestRoundTrip(t *testing.T) {
 	contentDir := writeContentDir(t, "setup.exe", setupContents)
 	outputDir := t.TempDir()
 
-	iw, err := PackageIntunewin("TestApp", contentDir, "setup.exe", outputDir)
+	p, err := NewPackager("TestApp", contentDir, "setup.exe", outputDir).Package()
 	if err != nil {
 		t.Fatalf("PackageIntunewin() error = %v", err)
 	}
 
-	opened, err := OpenFile(iw.Path)
+	opened, err := OpenFile(p.Path)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
@@ -69,12 +69,12 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 	contentDir := writeContentDir(t, "setup.exe", bytes.Repeat([]byte("a"), 5000))
 	outputDir := t.TempDir()
 
-	iw, err := PackageIntunewin("TestApp", contentDir, "setup.exe", outputDir)
+	p, err := NewPackager("TestApp", contentDir, "setup.exe", outputDir).Package()
 	if err != nil {
 		t.Fatalf("PackageIntunewin() error = %v", err)
 	}
 
-	r, err := zip.OpenReader(iw.Path)
+	r, err := zip.OpenReader(p.Path)
 	if err != nil {
 		t.Fatalf("failed to open packaged file: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 		t.Fatalf("content entry %s not found in packaged file", contentsDir+outputFileName)
 	}
 
-	raw, err := os.OpenFile(iw.Path, os.O_RDWR, 0644)
+	raw, err := os.OpenFile(p.Path, os.O_RDWR, 0644)
 	if err != nil {
 		t.Fatalf("failed to reopen packaged file for tampering: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestOpenFile_TamperedContentFails(t *testing.T) {
 		t.Fatalf("failed to close tampered file: %v", err)
 	}
 
-	if _, err := OpenFile(iw.Path); err == nil {
+	if _, err := OpenFile(p.Path); err == nil {
 		t.Fatal("OpenFile() error = nil, want an error for tampered content")
 	}
 }

@@ -55,7 +55,8 @@ func main() {
 
 		name := strings.TrimSuffix(path.Base(*setupFile), path.Ext(*setupFile))
 
-		_, err = pkg.PackageIntunewin(name, contentDir, *setupFile, outputDir)
+		p := pkg.NewPackager(name, contentDir, *setupFile, outputDir)
+		_, err = p.Package()
 		if err != nil {
 			log.Fatal(err)
 		}
