@@ -265,8 +265,8 @@ func parseSummaryInfo(data []byte) (string, error) {
 		return "", nil
 	}
 
-	setOffset := binary.LittleEndian.Uint32(data[44:48])
-	if int(setOffset) >= len(data) {
+	setOffset := uint64(binary.LittleEndian.Uint32(data[44:48]))
+	if setOffset >= uint64(len(data)) {
 		return "", errors.New("invalid property set offset")
 	}
 
@@ -275,17 +275,17 @@ func parseSummaryInfo(data []byte) (string, error) {
 		return "", errors.New("invalid property set data")
 	}
 
-	numProps := binary.LittleEndian.Uint32(setData[4:8])
-	for i := uint32(0); i < numProps; i++ {
+	numProps := uint64(binary.LittleEndian.Uint32(setData[4:8]))
+	for i := uint64(0); i < numProps; i++ {
 		offset := 8 + i*8
-		if int(offset+8) > len(setData) {
+		if offset+8 > uint64(len(setData)) {
 			break
 		}
 		pid := binary.LittleEndian.Uint32(setData[offset : offset+4])
-		propOffset := binary.LittleEndian.Uint32(setData[offset+4 : offset+8])
+		propOffset := uint64(binary.LittleEndian.Uint32(setData[offset+4 : offset+8]))
 
 		if pid == 9 || pid == 12 { // PID 9 (Package Code) or PID 12
-			if int(propOffset+4) <= len(setData) {
+			if propOffset+4 <= uint64(len(setData)) {
 				val := parsePropertyValue(setData[propOffset:])
 				if val != "" {
 					return val, nil
@@ -306,8 +306,8 @@ func parsePropertyValue(data []byte) string {
 		if len(data) < 8 {
 			return ""
 		}
-		length := binary.LittleEndian.Uint32(data[4:8])
-		if int(8+length) <= len(data) {
+		length := uint64(binary.LittleEndian.Uint32(data[4:8]))
+		if 8+length <= uint64(len(data)) {
 			strBytes := data[8 : 8+length]
 			return strings.TrimRight(string(strBytes), "\x00")
 		}
@@ -315,10 +315,10 @@ func parsePropertyValue(data []byte) string {
 		if len(data) < 8 {
 			return ""
 		}
-		charCount := binary.LittleEndian.Uint32(data[4:8])
-		if int(8+charCount*2) <= len(data) {
+		charCount := uint64(binary.LittleEndian.Uint32(data[4:8]))
+		if 8+charCount*2 <= uint64(len(data)) {
 			var u16s []uint16
-			for i := uint32(0); i < charCount; i++ {
+			for i := uint64(0); i < charCount; i++ {
 				u16s = append(u16s, binary.LittleEndian.Uint16(data[8+i*2:10+i*2]))
 			}
 			return strings.TrimRight(string(utf16.Decode(u16s)), "\x00")

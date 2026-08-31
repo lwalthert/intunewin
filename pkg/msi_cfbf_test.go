@@ -93,3 +93,56 @@ func TestReadMSIStringPoolTruncatedExtendedEntry(t *testing.T) {
 		t.Fatal("expected error for truncated extended string entry, got nil")
 	}
 }
+
+func TestParsePropertyValueOverflow(t *testing.T) {
+	// VT_LPSTR (type 30) with length 0xFFFFFFFF
+	lpstrData := []byte{
+		30, 0, 0, 0, // VT_LPSTR
+		0xFF, 0xFF, 0xFF, 0xFF, // length 0xFFFFFFFF
+		'h', 'e', 'l', 'l', 'o',
+	}
+	if got := parsePropertyValue(lpstrData); got != "" {
+		t.Errorf("parsePropertyValue(VT_LPSTR overflow) = %q, want empty string", got)
+	}
+
+	// VT_LPWSTR (type 31) with charCount 0x80000000
+	lpwstrData := []byte{
+		31, 0, 0, 0, // VT_LPWSTR
+		0x00, 0x00, 0x00, 0x80, // charCount 0x80000000 (overflows charCount*2)
+		'h', 0, 'i', 0,
+	}
+	if got := parsePropertyValue(lpwstrData); got != "" {
+		t.Errorf("parsePropertyValue(VT_LPWSTR overflow) = %q, want empty string", got)
+	}
+}
+
+func TestParseSummaryInfoPropOffsetOverflow(t *testing.T) {
+	// 48 bytes header + section
+	data := make([]byte, 80)
+	// Byte order
+	data[0] = 0xFE
+	data[1] = 0xFF
+	// numPropSets = 1
+	data[24] = 1
+	// setOffset = 48
+	data[44] = 48
+	// setData: offset 48
+	// numProps = 1 (offset 48+4 = 52)
+	data[52] = 1
+	// prop entry: offset 48+8 = 56
+	// pid = 9 (Package Code)
+	data[56] = 9
+	// propOffset = 0xFFFFFFFF (offset 48+12 = 60)
+	data[60] = 0xFF
+	data[61] = 0xFF
+	data[62] = 0xFF
+	data[63] = 0xFF
+
+	val, err := parseSummaryInfo(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != "" {
+		t.Errorf("parseSummaryInfo(propOffset overflow) = %q, want empty string", val)
+	}
+}
