@@ -76,3 +76,20 @@ func TestCFBFMSIReader(t *testing.T) {
 		t.Error("IsMachineInstall = false, want true")
 	}
 }
+
+func TestReadMSIStringPoolTruncatedExtendedEntry(t *testing.T) {
+	// Header (4 bytes) + extended entry trigger (l=0, ref=1) with no following length bytes
+	poolData := []byte{
+		0x00, 0x00, 0x00, 0x00, // header
+		0x00, 0x00, 0x01, 0x00, // l=0, ref=1 (extended string entry missing low 16 bits)
+	}
+	streams := map[string][]byte{
+		"_StringPool": poolData,
+		"_StringData": []byte("test"),
+	}
+
+	_, _, err := readMSIStringPoolFromStreams(streams)
+	if err == nil {
+		t.Fatal("expected error for truncated extended string entry, got nil")
+	}
+}

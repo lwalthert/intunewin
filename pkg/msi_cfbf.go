@@ -28,26 +28,26 @@ func (m *cfbfMSIReader) Read() (*data.MSIProperties, error) {
 	}
 	defer f.Close()
 
-	doc, err := mscfb.New(f)
+	msi, err := mscfb.New(f)
 	if err != nil {
 		return nil, fmt.Errorf("open msi compound file: %w", err)
 	}
 
 	streams := make(map[string][]byte)
-	for entry, err := doc.Next(); err == nil; entry, err = doc.Next() {
+	for entry, err := msi.Next(); err == nil; entry, err = msi.Next() {
 		if entry.FileInfo().IsDir() {
 			continue
 		}
 
-		data, err := io.ReadAll(doc)
+		data, err := io.ReadAll(msi)
 		if err != nil {
 			return nil, fmt.Errorf("read stream %s: %w", entry.Name, err)
 		}
 		decodedName := decodeMSIStreamName(entry.Name)
 		streams[decodedName] = data
 		streams[entry.Name] = data
-		if strings.HasPrefix(decodedName, "!") {
-			streams[strings.TrimPrefix(decodedName, "!")] = data
+		if name, ok := strings.CutPrefix(decodedName, "!"); ok {
+			streams[name] = data
 		}
 	}
 
@@ -361,6 +361,9 @@ func readMSIStringPoolFromStreams(streams map[string][]byte) ([]string, bool, er
 		l := int(binary.LittleEndian.Uint16(poolData[i : i+2]))
 		ref := int(binary.LittleEndian.Uint16(poolData[i+2 : i+4]))
 		if l == 0 && ref > 0 {
+			if i+6 > len(poolData) {
+				return nil, false, errors.New("truncated extended string entry in _StringPool")
+			}
 			l = (ref << 16) | int(binary.LittleEndian.Uint16(poolData[i+4:i+6]))
 			i += 4
 		}
