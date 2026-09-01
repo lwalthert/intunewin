@@ -84,7 +84,8 @@ func (enc *AESCBCEncrypter) Write(p []byte) (int, error) {
 
 	nBlocks := len(enc.buffer) / blockSize
 	if nBlocks > 0 {
-		toEncrypt := enc.buffer[:nBlocks*blockSize]
+		processed := nBlocks * blockSize
+		toEncrypt := enc.buffer[:processed]
 		enc.blockMode.CryptBlocks(toEncrypt, toEncrypt)
 		if _, err := enc.writer.Write(toEncrypt); err != nil {
 			return 0, err
@@ -92,7 +93,8 @@ func (enc *AESCBCEncrypter) Write(p []byte) (int, error) {
 		if _, err := enc.hash.Write(toEncrypt); err != nil {
 			return 0, err
 		}
-		enc.buffer = enc.buffer[nBlocks*blockSize:]
+		rem := copy(enc.buffer, enc.buffer[processed:])
+		enc.buffer = enc.buffer[:rem]
 	}
 
 	return len(p), nil
@@ -153,12 +155,14 @@ func (dec *AESCBCDecrypter) Write(p []byte) (int, error) {
 	// Keep at least one block in the buffer for unpadding during Close()
 	if len(dec.buffer) > blockSize {
 		nBlocks := (len(dec.buffer) - 1) / blockSize
-		toDecrypt := dec.buffer[:nBlocks*blockSize]
+		processed := nBlocks * blockSize
+		toDecrypt := dec.buffer[:processed]
 		dec.blockMode.CryptBlocks(toDecrypt, toDecrypt)
 		if _, err := dec.writer.Write(toDecrypt); err != nil {
 			return 0, err
 		}
-		dec.buffer = dec.buffer[nBlocks*blockSize:]
+		rem := copy(dec.buffer, dec.buffer[processed:])
+		dec.buffer = dec.buffer[:rem]
 	}
 
 	return len(p), nil

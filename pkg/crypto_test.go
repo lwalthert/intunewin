@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"io"
 	"os"
 	"testing"
 )
@@ -221,5 +222,76 @@ func TestDecodeBase64Key(t *testing.T) {
 
 	if _, err := decodeBase64Key("not-valid-base64!!!"); err == nil {
 		t.Error("decodeBase64Key() error = nil for invalid base64, want error")
+	}
+}
+
+func BenchmarkAESCBCEncrypter(b *testing.B) {
+	iv := make([]byte, 16)
+	aesKey := make([]byte, 32)
+	macKey := make([]byte, 32)
+	chunk := make([]byte, 32*1024)
+
+	b.SetBytes(int64(len(chunk)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		enc, err := NewAESCBCEncrypter(io.Discard, sha256.New, iv, aesKey, macKey)
+		if err != nil {
+			b.Fatal(err)
+		}
+		for j := 0; j < 10; j++ {
+			if _, err := enc.Write(chunk); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if err := enc.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkAESCBCDecrypter(b *testing.B) {
+	iv := make([]byte, 16)
+	aesKey := make([]byte, 32)
+	macKey := make([]byte, 32)
+	chunk := make([]byte, 32*1024)
+
+	var encBuf bytes.Buffer
+	enc, err := NewAESCBCEncrypter(&encBuf, sha256.New, iv, aesKey, macKey)
+	if err != nil {
+		b.Fatal(err)
+	}
+	for j := 0; j < 10; j++ {
+		if _, err := enc.Write(chunk); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if err := enc.Close(); err != nil {
+		b.Fatal(err)
+	}
+	ciphertext := encBuf.Bytes()[16:] // skip IV
+
+	b.SetBytes(int64(len(chunk)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		dec, err := NewAESCBCDecrypter(io.Discard, iv, aesKey)
+		if err != nil {
+			b.Fatal(err)
+		}
+		for offset := 0; offset < len(ciphertext); offset += len(chunk) {
+			end := offset + len(chunk)
+			if end > len(ciphertext) {
+				end = len(ciphertext)
+			}
+			if _, err := dec.Write(ciphertext[offset:end]); err != nil {
+				b.Fatal(err)
+			}
+		}
+		if err := dec.Close(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
