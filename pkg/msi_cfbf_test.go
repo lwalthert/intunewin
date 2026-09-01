@@ -146,3 +146,73 @@ func TestParseSummaryInfoPropOffsetOverflow(t *testing.T) {
 		t.Errorf("parseSummaryInfo(propOffset overflow) = %q, want empty string", val)
 	}
 }
+
+func TestReadMSITableInt(t *testing.T) {
+	tests := []struct {
+		name    string
+		bytes   []byte
+		size    int
+		wantVal int
+		wantOk  bool
+	}{
+		{"1-byte NULL", []byte{0x00}, 1, 0, false},
+		{"1-byte 0", []byte{0x80}, 1, 0, true},
+		{"1-byte 2", []byte{0x82}, 1, 2, true},
+		{"1-byte -1", []byte{0x7F}, 1, -1, true},
+		{"2-byte NULL", []byte{0x00, 0x00}, 2, 0, false},
+		{"2-byte 0", []byte{0x00, 0x80}, 2, 0, true},
+		{"2-byte 2 (HKLM root)", []byte{0x02, 0x80}, 2, 2, true},
+		{"2-byte -1", []byte{0xFF, 0x7F}, 2, -1, true},
+		{"2-byte -2", []byte{0xFE, 0x7F}, 2, -2, true},
+		{"4-byte NULL", []byte{0x00, 0x00, 0x00, 0x00}, 4, 0, false},
+		{"4-byte 0", []byte{0x00, 0x00, 0x00, 0x80}, 4, 0, true},
+		{"4-byte 100", []byte{0x64, 0x00, 0x00, 0x80}, 4, 100, true},
+		{"4-byte -1", []byte{0xFF, 0xFF, 0xFF, 0x7F}, 4, -1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotVal, gotOk := readMSITableInt(tt.bytes, tt.size)
+			if gotOk != tt.wantOk || (gotOk && gotVal != tt.wantVal) {
+				t.Errorf("readMSITableInt(%v, %d) = (%d, %t), want (%d, %t)", tt.bytes, tt.size, gotVal, gotOk, tt.wantVal, tt.wantOk)
+			}
+		})
+	}
+}
+
+func TestReadMSIStringPoolSinglePass(t *testing.T) {
+	// Header with 3-byte flag (0x8000 in word 1)
+	poolData := []byte{
+		0x00, 0x00, 0x00, 0x80, // codepage 0, is3ByteString = true
+		0x00, 0x00, 0x00, 0x00, // string 1: empty
+		0x05, 0x00, 0x01, 0x00, // string 2: len=5, ref=1
+		0x04, 0x00, 0x01, 0x00, // string 3: len=4, ref=1
+	}
+	dataBytes := []byte("helloworld")
+
+	streams := map[string][]byte{
+		"_StringPool": poolData,
+		"_StringData": dataBytes,
+	}
+
+	pool, is3Byte, err := readMSIStringPoolFromStreams(streams)
+	if err != nil {
+		t.Fatalf("readMSIStringPoolFromStreams failed: %v", err)
+	}
+	if !is3Byte {
+		t.Error("is3Byte = false, want true")
+	}
+	// strings: 0="", 1="", 2="hello", 3="worl"
+	if len(pool) != 4 {
+		t.Fatalf("len(pool) = %d, want 4", len(pool))
+	}
+	if pool[1] != "" {
+		t.Errorf("pool[1] = %q, want empty string", pool[1])
+	}
+	if pool[2] != "hello" {
+		t.Errorf("pool[2] = %q, want \"hello\"", pool[2])
+	}
+	if pool[3] != "worl" {
+		t.Errorf("pool[3] = %q, want \"worl\"", pool[3])
+	}
+}

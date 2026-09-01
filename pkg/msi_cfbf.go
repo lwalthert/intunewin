@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 
@@ -354,31 +355,38 @@ func readMSIStringPoolFromStreams(streams map[string][]byte) ([]string, bool, er
 		return nil, false, errors.New("_StringPool stream too short")
 	}
 
-	is3ByteString := (binary.LittleEndian.Uint16(poolData[2:4]) & 1) != 0
-
-	var stringLengths []int
-	for i := 4; i+4 <= len(poolData); i += 4 {
-		l := int(binary.LittleEndian.Uint16(poolData[i : i+2]))
-		ref := int(binary.LittleEndian.Uint16(poolData[i+2 : i+4]))
-		if l == 0 && ref > 0 {
-			if i+6 > len(poolData) {
-				return nil, false, errors.New("truncated extended string entry in _StringPool")
-			}
-			l = (ref << 16) | int(binary.LittleEndian.Uint16(poolData[i+4:i+6]))
-			i += 4
-		}
-		stringLengths = append(stringLengths, l)
-	}
+	is3ByteString := (binary.LittleEndian.Uint16(poolData[2:4]) & 0x8000) != 0
 
 	stringsList := []string{""} // 0 is empty string
 	offset := 0
-	for _, l := range stringLengths {
-		if offset+l > len(dataBytes) {
+
+	for i := 4; i+4 <= len(poolData); {
+		l := int(binary.LittleEndian.Uint16(poolData[i : i+2]))
+		refs := int(binary.LittleEndian.Uint16(poolData[i+2 : i+4]))
+
+		if l == 0 && refs == 0 {
 			stringsList = append(stringsList, "")
+			i += 4
 			continue
 		}
-		str := string(dataBytes[offset : offset+l])
-		stringsList = append(stringsList, str)
+
+		if l == 0 && refs > 0 {
+			if i+8 > len(poolData) {
+				return nil, false, errors.New("truncated extended string entry in _StringPool")
+			}
+			l = (refs << 16) | int(binary.LittleEndian.Uint16(poolData[i+4:i+6]))
+			i += 8
+		} else {
+			i += 4
+		}
+
+		if offset+l > len(dataBytes) {
+			stringsList = append(stringsList, "")
+			offset = len(dataBytes)
+			continue
+		}
+
+		stringsList = append(stringsList, string(dataBytes[offset:offset+l]))
 		offset += l
 	}
 
@@ -410,9 +418,19 @@ func readMSIColumnsFromStreams(streams map[string][]byte, pool []string, is3Byte
 
 	for i := 0; i < numRows; i++ {
 		tableIdx := readInt(data[offTable+i*colStringSize:offTable+(i+1)*colStringSize], colStringSize)
-		colNum := int(binary.LittleEndian.Uint16(data[offNum+i*2 : offNum+(i+1)*2]))
+		colNumRaw := binary.LittleEndian.Uint16(data[offNum+i*2 : offNum+(i+1)*2])
+		colNum := int(colNumRaw)
+		if colNumRaw > 0 {
+			colNum = int(int16(colNumRaw ^ 0x8000))
+		}
+
 		nameIdx := readInt(data[offName+i*colStringSize:offName+(i+1)*colStringSize], colStringSize)
-		colType := int(binary.LittleEndian.Uint16(data[offType+i*2 : offType+(i+1)*2]))
+
+		colTypeRaw := binary.LittleEndian.Uint16(data[offType+i*2 : offType+(i+1)*2])
+		colType := int(colTypeRaw)
+		if colTypeRaw > 0 {
+			colType = int(int16(colTypeRaw ^ 0x8000))
+		}
 
 		var tableName, colName string
 		if tableIdx < len(pool) {
@@ -495,13 +513,46 @@ func readMSITableRowsFromStreams(streams map[string][]byte, tableName string, co
 					rows[i][j] = ""
 				}
 			} else {
-				val := readInt(valBytes, c.ByteSize)
-				rows[i][j] = fmt.Sprintf("%d", val)
+				if val, ok := readMSITableInt(valBytes, c.ByteSize); ok {
+					rows[i][j] = strconv.Itoa(val)
+				} else {
+					rows[i][j] = ""
+				}
 			}
 		}
 	}
 
 	return rows, nil
+}
+
+func readMSITableInt(b []byte, size int) (int, bool) {
+	switch size {
+	case 1:
+		v := b[0]
+		if v == 0 {
+			return 0, false // NULL
+		}
+		return int(int8(v ^ 0x80)), true
+	case 2:
+		v := binary.LittleEndian.Uint16(b)
+		if v == 0 {
+			return 0, false // NULL
+		}
+		return int(int16(v ^ 0x8000)), true
+	case 3:
+		v := uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16)
+		if v == 0 {
+			return 0, false // NULL
+		}
+		return int(int32(v ^ 0x800000)), true
+	case 4:
+		v := binary.LittleEndian.Uint32(b)
+		if v == 0 {
+			return 0, false // NULL
+		}
+		return int(int32(v ^ 0x80000000)), true
+	}
+	return 0, false
 }
 
 func readInt(b []byte, size int) int {
